@@ -9,6 +9,7 @@ __pycache__/
 .pytest_cache/
 .env
 data/raw/
+data/sample/cases.jsonl
 .aider*
 .continue/
 artifacts/llm_cache/

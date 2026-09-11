@@ -1,0 +1,23 @@
+tweet_id,author_id,inbound,created_at,text,response_tweet_id,in_response_to_tweet_id
+106,SpotifyCares,False,Tue Oct 31 10:07:00 +0000 2017,@1002 Send us a DM with your account email and we'll take a look. ^CD,,104
+101,1001,True,Tue Oct 31 10:00:00 +0000 2017,@SpotifyCares my playlists vanished,102,
+102,SpotifyCares,False,Tue Oct 31 10:01:00 +0000 2017,@1001 Sorry to hear that! Which device are you on? ^AB,"103,104",101
+103,1001,True,Tue Oct 31 10:02:00 +0000 2017,@SpotifyCares iPhone 8,105,102
+104,1002,True,Tue Oct 31 10:03:00 +0000 2017,@SpotifyCares @1001 same here on Android,106,102
+105,SpotifyCares,False,Tue Oct 31 10:05:00 +0000 2017,@1001 Thanks. Try logging out and back in. ^AB,,103
+201,1005,True,Tue Oct 31 11:00:00 +0000 2017,@SpotifyCares still broken,202,999
+202,SpotifyCares,False,Tue Oct 31 11:01:00 +0000 2017,@1005 We're on it. ^AB,,201
+302,SpotifyCares,False,Tue Oct 31 12:02:00 +0000 2017,@1003 2/2 You can upgrade in the app. ^EF,,301
+301,1003,True,Tue Oct 31 12:00:00 +0000 2017,@SpotifyCares why can't I download songs?,"302,303",
+303,SpotifyCares,False,Tue Oct 31 12:01:00 +0000 2017,@1003 1/2 Offline mode needs Premium. ^EF,,301
+401,1004,True,Tue Oct 31 13:00:00 +0000 2017,@SpotifyCares how do I add someone to my family plan?,402,
+402,SpotifyCares,False,Tue Oct 31 13:01:00 +0000 2017,@1004 Only your family plan admin can do that. ^GH,403,401
+403,1004,True,Tue Oct 31 13:02:00 +0000 2017,@SpotifyCares I am the admin,404,402
+404,1004,True,Tue Oct 31 13:03:00 +0000 2017,@SpotifyCares and the invite button is greyed out,405,403
+405,SpotifyCares,False,Tue Oct 31 13:05:00 +0000 2017,@1004 That's fixed now - thanks for your patience. ^GH,406,404
+406,1004,True,Tue Oct 31 13:06:00 +0000 2017,@SpotifyCares works now thanks,,405
+601,1006,True,Tue Oct 31 14:00:00 +0000 2017,@SpotifyCares app crashes on launch,"602,603",
+603,SpotifyCares,False,Tue Oct 31 14:01:00 +0000 2017,@1006 Reply B sent in the same second. ^IJ,,601
+602,SpotifyCares,False,Tue Oct 31 14:01:00 +0000 2017,@1006 Reply A sent in the same second. ^IJ,,601
+701,1007,True,Tue Oct 31 15:00:00 +0000 2017,@AppleSupport my phone will not charge,702,
+702,AppleSupport,False,Tue Oct 31 15:01:00 +0000 2017,@1007 Let's look into that together. ^KL,,701
