@@ -139,6 +139,8 @@ def _cache_key(model: str, prompt: str, system: str | None, schema: dict | None,
 
 def _log_call(key: str, response: LLMResponse, repair: bool) -> None:
     """Append one line per call to the log the cost report reads (reply text left out)."""
+    # Cost and throughput reports must keep cache_hit=False rows only: a cached row's latency_s
+    # is a disk read, not inference, and its token counts repeat the original call's.
     record = {"time": datetime.now(timezone.utc).isoformat(), "key": key, "repair": repair,
               "model": response.model, "cache_hit": response.cache_hit, "prompt_tokens": response.prompt_tokens,
               "completion_tokens": response.completion_tokens, "latency_s": round(response.latency_s, 3)}
