@@ -9,3 +9,7 @@ __pycache__/
 .pytest_cache/
 .env
 data/raw/
+.aider*
+.continue/
+artifacts/llm_cache/
+artifacts/llm_calls.jsonl
