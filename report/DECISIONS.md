@@ -34,3 +34,16 @@ measured on the full `data/raw/twcs.csv` (2,811,774 rows) on 2026-09-11: the
   - Rejected: every earlier tweet in the thread, across branches, in time
     order. More context, but it mixes parallel conversations, including other
     customers' messages, into one.
+
+## Clean (`src/clean.py`)
+
+- **Near-duplicates are flagged, not removed.** Every case keeps its row and
+  gets a `dup_group_id` (MinHash over character 5-grams of `customer_text`
+  with `@USER` removed, Jaccard >= 0.85). Repetition is real traffic: 137
+  groups cover 368 cases, and the largest is a 10-tweet
+  `#SupportTwoFactorAuth` campaign.
+  - The flag will be consumed in three places: excluding same-group
+    precedents from retrieval (leak prevention), capping the golden set at
+    one case per group, and reporting metrics both per case and per group.
+  - Rejected: deleting near-duplicates. That distorts the traffic mix the
+    triage decisions are measured on, and it cannot be undone downstream.

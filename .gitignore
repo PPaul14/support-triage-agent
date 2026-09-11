@@ -10,6 +10,7 @@ __pycache__/
 .env
 data/raw/
 data/sample/cases.jsonl
+data/sample/cases_clean.jsonl
 .aider*
 .continue/
 artifacts/llm_cache/
