@@ -47,3 +47,13 @@ measured on the full `data/raw/twcs.csv` (2,811,774 rows) on 2026-09-11: the
     one case per group, and reporting metrics both per case and per group.
   - Rejected: deleting near-duplicates. That distorts the traffic mix the
     triage decisions are measured on, and it cannot be undone downstream.
+
+## Taxonomy (`src/taxonomy.py`)
+
+- **`@USER` with punctuation attached is left in the clustering text** (for
+  example `@USER,`, `@USER's`, `@USER...`). `src/taxonomy.py` strips `@USER`
+  only as a whole token, so 180 of the 4,000 sampled messages still contain
+  one, and "user" appears among the distinctive terms of clusters 2, 3 and 11.
+  Known artifact, left unfixed.
+  - Rejected: stripping every `@USER` form. That changes the embeddings and
+    therefore the clusters the 8-intent taxonomy was merged from.

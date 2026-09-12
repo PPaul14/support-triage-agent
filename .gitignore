@@ -14,4 +14,6 @@ data/sample/cases_clean.jsonl
 .aider*
 .continue/
 artifacts/llm_cache/
+artifacts/embeddings/
 artifacts/llm_calls.jsonl
+artifacts/clusters.md
