@@ -1,8 +1,11 @@
 # Intent taxonomy: labelling guideline
 
 This file is the single source of truth for intents. It is used twice: as the
-instruction sheet for hand-labelling the golden set, and verbatim as the
-few-shot section of the classifier prompt. Change an intent here and both
+instruction sheet for hand-labelling the golden set, and as the few-shot
+section of the classifier prompt. `python -m src.classify` renders a compact
+view of it for the prompt (`artifacts/classifier_prompt.txt`) from each
+intent's Summary line, its first two examples and the tie-break order, so
+keep every Summary line on a single line. Change an intent here and both uses
 change.
 
 Every quoted message is copied exactly from `data/sample/cases_clean.jsonl`
@@ -52,6 +55,8 @@ the intent.
 
 ## billing_subscription
 
+**Summary.** Charges, refunds, payment methods, a paid plan that is not active, Student or promotional pricing, cancelling, and anything about Premium for Family.
+
 **Definition.** Payments and plans: charges that are unexpected, doubled,
 after cancelling or at the wrong price; refunds; payment methods that fail or
 cannot be updated; a paid plan that is not active (the account still shows
@@ -78,6 +83,8 @@ the agent has no access to.
 
 ## account_access
 
+**Summary.** Logging in, signing up, password resets, a lost email or Facebook login, and compromised accounts (hacked, or used by someone else).
+
 **Definition.** Getting into an account: logging in, signing up, password
 resets and reset emails that do not arrive, an email address or username the
 customer can no longer use, Facebook-linked logins that stopped working,
@@ -95,14 +102,16 @@ data the agent does not have.
 
 **Examples**
 - [case 499281] "Hey @USER I'm locked out of my account and can't reset my password" (auto)
-- [case 2463178] "@USER I deleted my facebook account which was linked to my Spotify account. I can't log anymore into Spotify :( Any help/tips ? Thanks" (auto)
 - [case 2059128] "@USER @USER please help, my account has been hacked and they have changed my email address so I can't log in 😬😱" (escalate: compromised)
+- [case 2463178] "@USER I deleted my facebook account which was linked to my Spotify account. I can't log anymore into Spotify :( Any help/tips ? Thanks" (auto)
 
 **Near misses**
 - [case 12093] "@USER I got kicked off of my own account & cant log back in & y'all are still charging me for premium but I can't even use it😪😪" → billing_subscription: a login problem, but it also reports an ongoing charge, and billing outranks everything.
 - [case 2919447] "@USER hello i have problems with my familiar premium plan, my family members just can't login." → billing_subscription: family members who cannot log in are a Premium for Family problem.
 
 ## playback_failure
+
+**Summary.** Spotify is broken right now: songs won't play, stop or skip, the app crashes or says it is offline, devices or Connect fail, outages.
 
 **Definition.** Spotify is broken right now: songs will not play, stop, skip,
 cut out or play the wrong track; the app or web player crashes, freezes or
@@ -128,6 +137,8 @@ not need account or payment data.
 
 ## library_playlists
 
+**Summary.** The customer's own collection: playlists, saved music or downloads that vanished, changed, or won't download.
+
 **Definition.** The customer's own collection: playlists that vanished,
 changed or keep songs the customer removed; saved songs and albums that
 disappeared; downloads that delete themselves or will not download; offline
@@ -152,6 +163,8 @@ and do not need account or payment data.
 
 ## content_unavailable
 
+**Summary.** Music missing from Spotify or blocked in the customer's country, releases not out yet, Spotify not launched there, requests to add music.
+
 **Definition.** Music the customer wants is not on Spotify, or not for them: a
 song, album or artist missing from the catalogue or removed, a release that
 has not appeared yet, tracks marked unavailable or greyed out, content blocked
@@ -174,6 +187,8 @@ which the agent can explain but cannot change, and it needs no account data.
 - [case 2606366] "@USER Why can I no longer see the exact date albums and singles came out? I think you guys need to fix that..." → feature_request: the albums are there; what changed is how the app shows release dates.
 
 ## feature_request
+
+**Summary.** The product works as designed but the customer wants it changed or asks what it can do: new features and apps, ads, removed features.
 
 **Definition.** The product works as designed and the customer wants it
 different, or asks what it can do: requests for new features or apps (Apple
@@ -201,6 +216,8 @@ agent acknowledges the request and passes the feedback on.
 
 ## followup_diagnostic
 
+**Summary.** A reply whose problem is still open but not named in it: a suggested step didn't help, device or version details, or a pointer to a DM.
+
 **Definition.** A reply whose problem is still open but is not named in the
 message itself: the result of a step the brand suggested that did not help,
 diagnostic details the brand asked for (device, OS, app version), or a
@@ -226,6 +243,8 @@ its own, including a DM pointer with no prior turns.
 
 ## chatter_thanks
 
+**Summary.** Nothing to resolve: thanks, praise, jokes, sign-offs, and replies saying the problem is now fixed.
+
 **Definition.** Nothing to resolve: thanks, praise, sign-offs, jokes and
 reactions, including replies confirming that a problem is now fixed. The
 message asks for nothing and reports no open problem. It does not cover thanks
@@ -246,6 +265,8 @@ conversation politely.
 - [case 89535] "@USER Thanks for response! The app says that music is playing, but no sound comes out. I have to restart to make it work again." → playback_failure: the thanks is politeness; the message reports sound not playing.
 
 ## other_unclear
+
+**Summary.** The message alone doesn't say what is needed: not mainly English, content only in a screenshot or link, no problem named, or no intent fits.
 
 **Definition.** The message alone does not tell the agent what to do. Always
 label here: messages not mainly in English, whatever they are about (decided
@@ -270,6 +291,8 @@ stated.
 - [case 1412659] "@USER is Spotify down?" → playback_failure: short, but it names the problem, a possible outage.
 
 ## Tie-break rules
+
+**Summary.** A message not mainly in English is other_unclear. Otherwise, if several intents fit, choose the one that comes first in this order.
 
 When a message fits more than one intent, the label is the one that comes
 first in this order:

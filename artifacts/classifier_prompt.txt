@@ -1,0 +1,40 @@
+Customer support intents, each with a one-line definition and two real customer messages.
+
+Rules: A message not mainly in English is other_unclear. Otherwise, if several intents fit, choose the one that comes first in this order.
+Order: billing_subscription > account_access > playback_failure > library_playlists > content_unavailable > feature_request > followup_diagnostic > chatter_thanks > other_unclear
+
+billing_subscription: Charges, refunds, payment methods, a paid plan that is not active, Student or promotional pricing, cancelling, and anything about Premium for Family.
+- "@USER I have been charged for premium membership but it shows that I don't have premium."
+- "@USER I've been charged the full £9.99 for premium even though I'm on the student plan, can someone please help me wi..."
+
+account_access: Logging in, signing up, password resets, a lost email or Facebook login, and compromised accounts (hacked, or used by someone else).
+- "Hey @USER I'm locked out of my account and can't reset my password"
+- "@USER @USER please help, my account has been hacked and they have changed my email address so I can't log in 😬😱"
+
+playback_failure: Spotify is broken right now: songs won't play, stop or skip, the app crashes or says it is offline, devices or Connect fail, outages.
+- "@USER I'm having issues playing most songs. Only random ones are playing and showing up."
+- "@USER All songs keep cutting in and out. Updated app and still happening. Only happening to audio from spotify. Pleas..."
+
+library_playlists: The customer's own collection: playlists, saved music or downloads that vanished, changed, or won't download.
+- "@USER went into spotify today and all my playlists are gone"
+- "@USER my offline music keeps deleting from my device every few weeks. It gets really annoying every time I have to re..."
+
+content_unavailable: Music missing from Spotify or blocked in the customer's country, releases not out yet, Spotify not launched there, requests to add music.
+- "Sadly I can't listen to #Repuation because it is not on @USER 😩"
+- "@USER Hey! do you know why this album isn't accessible on Spotify UK? it's one of my favourites 😭 URL"
+
+feature_request: The product works as designed but the customer wants it changed or asks what it can do: new features and apps, ads, removed features.
+- "@USER any plans for Apple Watch app? If not, I'll have to switch to Apple Music"
+- "@USER pleaseeeee update your app for iPhone X."
+
+followup_diagnostic: A reply whose problem is still open but not named in it: a suggested step didn't help, device or version details, or a pointer to a DM.
+- "@USER Did not work. Still having same issue."
+- "@USER iOS 11.2, Spotify version 8.4.25.906"
+
+chatter_thanks: Nothing to resolve: thanks, praise, jokes, sign-offs, and replies saying the problem is now fixed.
+- "Thank you for the great customer service @USER 👏🏽"
+- "@USER That did it! Thanks! I originally just restarted it, but logging out helped. :)"
+
+other_unclear: The message alone doesn't say what is needed: not mainly English, content only in a screenshot or link, no problem named, or no intent fits.
+- "@USER what's going on URL"
+- "@USER min, pembayaran spotify premium yang 3 bulan dan 6 bulan hanya untuk akun baru??"

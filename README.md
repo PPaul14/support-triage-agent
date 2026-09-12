@@ -57,4 +57,10 @@ with the draft model.
 
 ## License
 
-MIT - see [LICENSE](LICENSE).
+The code is MIT licensed - see [LICENSE](LICENSE).
+
+Quoted dataset excerpts are not MIT. The example customer messages in
+`docs/taxonomy.md` and `artifacts/classifier_prompt.txt` come from the
+Customer Support on Twitter dataset,
+[thoughtvector/customer-support-on-twitter](https://www.kaggle.com/datasets/thoughtvector/customer-support-on-twitter),
+and are licensed CC BY-NC-SA 4.0. See [data/DATA_LICENSE.md](data/DATA_LICENSE.md).

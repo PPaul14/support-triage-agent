@@ -35,8 +35,9 @@ class LLMParseError(Exception):
 
 
 def complete(prompt: str, model: str, *, system: str | None = None, schema: dict | None = None,
-             temperature: float = 0.0, num_ctx: int = 2048, num_predict: int = 512) -> LLMResponse:
-    """Run one LLM call, served from the disk cache when possible."""
+             temperature: float = 0.0, num_ctx: int = 4096, num_predict: int = 512) -> LLMResponse:
+    """Run one LLM call, served from the disk cache when possible. Put the static prompt block FIRST
+    and the per-case content LAST, so Ollama can reuse the already-processed prefix between calls."""
     options = {"temperature": float(temperature), "num_ctx": num_ctx, "num_predict": num_predict, "seed": SEED}
     key = _cache_key(model, prompt, system, schema, options)
     cache_path = CACHE_DIR / f"{key}.json"
@@ -85,8 +86,7 @@ def _repair(key: str, model: str, messages: list[dict], schema: dict, options: d
         raise LLMParseError(f"{model} returned unusable JSON twice. First: {reason}. After repair: "
                             f"{error}. Used {second.completion_tokens} of num_predict="
                             f"{options['num_predict']} tokens. Last reply: {second.text!r}") from error
-    # The returned response carries the cost of both calls.
-    second.prompt_tokens += first.prompt_tokens
+    second.prompt_tokens += first.prompt_tokens  # the returned response carries the cost of both calls
     second.completion_tokens += first.completion_tokens
     second.latency_s += first.latency_s
     return second
