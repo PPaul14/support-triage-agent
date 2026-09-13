@@ -138,3 +138,61 @@ calls per model, with placeholder draft and judge prompts.
     which makes agreement on them meaningless. That is the expectation behind
     the choice; it has not been measured in this project.
   - Rejected: a holistic 1-5 quality score.
+
+## Evaluation method (decided 2026-09-13, before any system is scored)
+
+- **Harmful auto-replies are divided by all golden cases**: a per-ticket rate
+  on the same denominator as the auto-handle rate.
+  - Rejected: dividing by escalate cases only, which would restate 1 - recall.
+
+- **The safety budget is pre-registered**, fixed before any system is scored
+  so the headline cannot be tuned after the fact. SEVERE harmful auto-replies:
+  zero tolerance; layers 1 and 2 of the escalation stack are deterministic and
+  exist to make that achievable by construction. ORDINARY: at most 5% of all
+  golden cases, which is at most 7 of 150. At n = 150 one case is 0.67
+  percentage points, so the budget is coarse and the operating point is
+  chosen at one-case resolution. The headline is the auto-handle rate at the
+  grid point with the highest auto-handle rate that stays within the budget.
+  - Rejected: choosing the budget after seeing the operating curve.
+
+- **Systems are compared with a paired bootstrap on the per-case
+  difference**: 2,000 resamples with a fixed seed, the same resampled cases
+  scored for both systems, and an improvement stands only if the 95% interval
+  of the difference excludes zero.
+  - Rejected: comparing per-system confidence intervals. Overlapping
+    intervals are not a test, and at n = 150 that distinction decides whether
+    any claimed improvement stands.
+
+- **Raw agreement is reported beside kappa for every judge check.** Kappa
+  collapses when a check is nearly always "yes", as tone_appropriate almost
+  certainly will be, even when the raters agree on almost every case. Kappa
+  alone would understate agreement there; raw agreement alone would overstate
+  it.
+  - Rejected: kappa alone, with raw agreement only for would_send_unedited.
+
+- **The 60 hand-scored replies are scored blind to the system that produced
+  them.** The harness shuffles them and strips every system identifier before
+  presenting them.
+
+- **mistral's 40 (case, system) pairs are drawn from the 60 hand-scored
+  replies**, so its agreement with the hand scores is computable. That fixes
+  the sample at 40 pairs in total, which settles the range in the Evaluation
+  scope timing entry at its 40-judgement end.
+
+## Harness
+
+- **The golden label records `compromised` as a boolean** next to the
+  free-text `escalate_reason`, because the SEVERE harm rule needs it as data
+  rather than prose. Free text goes in a separate `notes` field (renamed from
+  `note`). Both changes were made before any case was labelled, so no label
+  needed migrating.
+  - Rejected: reading compromised accounts out of the free-text reason.
+
+- **`src/llm.py` is 154 lines, an exception to the 150-line limit**, because
+  `complete()` gained `bypass_cache`. A temperature-0 self-consistency re-run
+  through the cache returns the stored reply and would report 100% agreement
+  by construction. The bypass neither reads nor writes the cache, so a re-run
+  cannot replace the reply that later stages read. Keeping it in the one
+  module that talks to Ollama matters more than four lines.
+  - Rejected: a second Ollama client for re-runs, which would break the rule
+    that every LLM call goes through `src/llm.py`.

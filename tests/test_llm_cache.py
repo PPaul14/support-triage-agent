@@ -42,3 +42,27 @@ def test_second_identical_call_is_a_cache_hit(tmp_path: Path, monkeypatch: pytes
     records = [json.loads(line) for line in log_lines]
     assert [record["cache_hit"] for record in records] == [False, True]
     assert records[0]["key"] == records[1]["key"]
+
+
+def test_bypass_cache_reaches_the_model_and_leaves_the_cache_alone(tmp_path: Path,
+                                                                   monkeypatch: pytest.MonkeyPatch) -> None:
+    # A fake model call instead of Ollama, so this runs in CI: each call returns a new reply text.
+    monkeypatch.setattr(llm, "CACHE_DIR", tmp_path / "llm_cache")
+    monkeypatch.setattr(llm, "CALL_LOG", tmp_path / "llm_calls.jsonl")
+    calls = []
+
+    def fake_chat(model: str, messages: list[dict], schema: dict | None, options: dict) -> llm.LLMResponse:
+        calls.append(model)
+        return llm.LLMResponse(text=f"reply {len(calls)}", parsed=None, model=model, prompt_tokens=1,
+                               completion_tokens=1, latency_s=0.0, cache_hit=False)
+
+    monkeypatch.setattr(llm, "_chat", fake_chat)
+    first = llm.complete(PROMPT, MODEL)
+    cached = llm.complete(PROMPT, MODEL)
+    rerun = llm.complete(PROMPT, MODEL, bypass_cache=True)
+    after = llm.complete(PROMPT, MODEL)
+
+    assert len(calls) == 2  # only the first call and the bypassing re-run reached the model
+    assert first.text == "reply 1" and cached.cache_hit and cached.text == "reply 1"
+    assert not rerun.cache_hit and rerun.text == "reply 2"
+    assert after.cache_hit and after.text == "reply 1"  # the re-run did not overwrite the cached reply

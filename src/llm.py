@@ -35,14 +35,17 @@ class LLMParseError(Exception):
 
 
 def complete(prompt: str, model: str, *, system: str | None = None, schema: dict | None = None,
-             temperature: float = 0.0, num_ctx: int = 4096, num_predict: int = 512) -> LLMResponse:
+             temperature: float = 0.0, num_ctx: int = 4096, num_predict: int = 512,
+             bypass_cache: bool = False) -> LLMResponse:
     """Run one LLM call, served from the disk cache when possible. Put the static prompt block FIRST
-    and the per-case content LAST, so Ollama can reuse the already-processed prefix between calls."""
+    and the per-case content LAST, so Ollama can reuse the already-processed prefix between calls.
+    bypass_cache=True neither reads nor writes the cache: a temperature-0 re-run (a self-consistency
+    check) must reach the model, and must not overwrite the reply that later stages read."""
     options = {"temperature": float(temperature), "num_ctx": num_ctx, "num_predict": num_predict, "seed": SEED}
     key = _cache_key(model, prompt, system, schema, options)
     cache_path = CACHE_DIR / f"{key}.json"
 
-    if cache_path.exists():  # cache hit: return before any network code runs
+    if cache_path.exists() and not bypass_cache:  # cache hit: return before any network code runs
         start = time.perf_counter()
         stored = json.loads(cache_path.read_text(encoding="utf-8"))
         response = LLMResponse(**stored["response"])
@@ -63,6 +66,8 @@ def complete(prompt: str, model: str, *, system: str | None = None, schema: dict
         except ValueError as error:
             response = _repair(key, model, messages, schema, options, response, str(error))
 
+    if bypass_cache:
+        return response
     # Only validated replies get here. Temp file + rename: a killed run never leaves half a file.
     request = {"model": model, "system": system, "prompt": prompt, "schema": schema, "options": options}
     entry = {"request": request, "response": asdict(response)}

@@ -121,7 +121,16 @@ golden set: 150 cases planned (120 stratified by estimated intent, 30 hard
 cases), labelled: TBD.
 
 Every value in this section is TBD. The section fixes what each metric is,
-why it was chosen and how it is reported, before any system is scored.
+why it was chosen and how it is reported before any system is scored, and the
+safety budget in 3.2 is pre-registered.
+
+**Comparing systems.** A difference between two systems is tested with a
+paired bootstrap: 2,000 resamples of the golden cases with a fixed seed, the
+same resampled cases scored for both systems, and the 95% interval of the
+difference between them. A claimed improvement stands only if that interval
+excludes zero. Overlapping per-system confidence intervals are not a test,
+and at n = 150 that distinction decides whether any claimed improvement
+stands.
 
 ### 3.1 Intent classification
 
@@ -129,10 +138,12 @@ why it was chosen and how it is reported, before any system is scored.
   number of golden cases of that class), and the 9 x 9 confusion matrix.
 - **Why macro-F1:** every intent counts equally, so a system cannot score
   well by getting only the frequent intents right.
-- **Uncertainty:** a 95% bootstrap confidence interval on macro-F1, from
-  2,000 resamples of the golden cases with a fixed seed. With n = 150, most
-  differences between systems will be statistically indistinguishable, and
-  the report says so rather than letting a reader assume a ranking.
+- **Uncertainty:** a 95% bootstrap confidence interval on each system's
+  macro-F1, from 2,000 resamples of the golden cases with a fixed seed. With
+  n = 150, most differences between systems will be statistically
+  indistinguishable, and the report says so rather than letting a reader
+  assume a ranking. Differences are tested as above, never by comparing these
+  intervals.
 - **Reported twice:**
   - Stratified: on the golden set as labelled.
   - Reweighted to the estimated population intent shares. Each case is
@@ -159,28 +170,38 @@ that needed a human is worse than escalating one that did not. A single F1
 treats the two errors alike, so it is the wrong summary.
 
 - **Harmful auto-reply:** a case the golden label marks escalate that the
-  system auto-handled. Its rate is harmful auto-replies divided by all golden
-  cases, so it reads as a per-ticket rate (and, reweighted, as a production
-  rate).
-  - SEVERE when the true intent is billing_subscription or the case involves
-    a compromised account; ORDINARY otherwise. Both rates are reported.
-  - A compromised account is read from the golden label's escalate_reason
-    (how it is recorded: TBD; the labelling CLI stores the reason as free
-    text today).
+  system auto-handled.
+  - Its rate is harmful auto-replies divided by all golden cases: a
+    per-ticket rate on the same denominator as the auto-handle rate. Dividing
+    by escalate cases only would restate 1 - recall.
+  - SEVERE when the true intent is billing_subscription or the golden label's
+    `compromised` field is true; ORDINARY otherwise. Both rates are reported.
 - **Precision and recall on the escalate class**, with escalate as the
   positive class.
+- **Pre-registered safety budget**, fixed before any system is scored so the
+  headline cannot be tuned after the fact:
+  - SEVERE harmful auto-replies: zero tolerance. Layers 1 and 2 of the
+    escalation stack are deterministic and exist to make this achievable by
+    construction (layer definitions: Section 2, TBD).
+  - ORDINARY harmful auto-replies: at most 5% of all golden cases. At n = 150
+    one case is 0.67 percentage points, so the budget is coarse: 5% of 150 is
+    7.5 cases, which allows at most 7, and the operating point is chosen at
+    that one-case resolution.
+  - The budget is checked on the golden set as labelled, in case counts. The
+    reweighted rates are reported beside it.
 - **Operating curve:** auto-handle rate on the x-axis against
   harmful-auto-reply rate on the y-axis, sweeping the intent-confidence and
   retrieval-similarity thresholds over a grid. Every grid point is plotted and
   the frontier drawn. Only a system that computes a threshold has a curve:
   the full system sweeps both, the no-RAG ablation has intent confidence
   only, and B0 and B1 are single points.
+  - The operating point is the grid point with the highest auto-handle rate
+    that stays within the budget. Chosen point: TBD.
   - How intent confidence is obtained: TBD. Finding 2.2 is why its
     calibration is checked on the golden set rather than assumed.
-  - Chosen operating point: TBD, stated with the reason for it.
-- **Headline metric: auto-handle rate at a fixed harmful-auto-reply budget.**
-  Hiver sells a shared-inbox helpdesk, and deflection at a stated safety
-  budget is the number that maps to their product. The budget: TBD.
+- **Headline metric: auto-handle rate at that operating point.** Hiver sells
+  a shared-inbox helpdesk, and deflection at a stated safety budget is the
+  number that maps to their product.
 - **Layer attribution:** for every escalation, record which of the four
   escalation layers fired (layer definitions: Section 2, TBD). Report, per
   layer, how many escalations it fired on and how many it alone caught. If the
@@ -189,9 +210,9 @@ treats the two errors alike, so it is the wrong summary.
 
 | escalation | B0 | B1 | no-RAG | full |
 |---|---|---|---|---|
-| auto-handle rate at the budget (headline) | TBD | TBD | TBD | TBD |
-| harmful auto-reply rate, severe | TBD | TBD | TBD | TBD |
-| harmful auto-reply rate, ordinary | TBD | TBD | TBD | TBD |
+| auto-handle rate at the operating point (headline) | TBD | TBD | TBD | TBD |
+| harmful auto-reply rate, severe (budget: 0) | TBD | TBD | TBD | TBD |
+| harmful auto-reply rate, ordinary (budget: at most 5%) | TBD | TBD | TBD | TBD |
 | escalate precision | TBD | TBD | TBD | TBD |
 | escalate recall | TBD | TBD | TBD | TBD |
 
@@ -228,27 +249,34 @@ B0's constant reply is judged once per intent and the verdict reused
 
 ### 3.4 Judge validation
 
-- **Against a human:** I hand-score 60 replies on the same five checks.
-  Reported: Cohen's kappa per check, plus raw agreement on
-  would_send_unedited.
-- **Self-consistency:** qwen re-judges 40 replies at temperature 0, and the
-  exact-agreement rate is reported. Non-determinism here bounds every quality
-  number downstream. The re-runs must bypass the disk cache in `src/llm.py`:
-  an identical prompt at temperature 0 is otherwise served from the cache, and
-  agreement would be 100% by construction. How the harness bypasses it: TBD.
-- **Cross-judge:** mistral 7B judges 40 (case, system) pairs that qwen also
-  judged. Reported: kappa against qwen and against my hand scores. Kappa
-  against my scores needs the 40 pairs to come from the 60 I hand-score.
+- **Against a human:** I hand-score 60 replies on the same five checks,
+  blind to which system produced each. The harness shuffles the 60 and strips
+  every system identifier before presenting them.
+- **Self-consistency:** qwen re-judges 40 replies at temperature 0 through
+  `complete(..., bypass_cache=True)`, and the exact-agreement rate is
+  reported. Without the bypass, an identical prompt at temperature 0 is served
+  from the disk cache and agreement would be 100% by construction. The bypass
+  neither reads nor writes the cache, so the re-run cannot replace the
+  verdicts the metrics use. Non-determinism here bounds every quality number
+  downstream.
+- **Cross-judge:** mistral 7B judges 40 (case, system) pairs drawn from the
+  60 replies I hand-score, so its agreement with me is computable. That fixes
+  the mistral sample at 40 pairs in total. Reported: agreement with qwen and
+  with my hand scores.
+- **Kappa and raw agreement, always both, for every check.** Kappa collapses
+  when a check is nearly always "yes", as tone_appropriate almost certainly
+  will be, even when the two raters agree on almost every case. Reporting
+  only kappa there would understate agreement; reporting only raw agreement
+  would overstate it.
 - A low kappa is reported as a finding, not hidden: it would mean the quality
   numbers are directional only.
 
-| judge validation | value |
-|---|---|
-| kappa, qwen vs hand scores, per check | TBD |
-| raw agreement, qwen vs hand scores, would_send_unedited | TBD |
-| qwen self-consistency, exact agreement on 40 | TBD |
-| kappa, mistral vs qwen | TBD |
-| kappa, mistral vs hand scores | TBD |
+| comparison | checks | kappa | raw agreement |
+|---|---|---|---|
+| qwen vs my hand scores (60) | each of the 5 | TBD | TBD |
+| mistral vs qwen (40) | each of the 5 | TBD | TBD |
+| mistral vs my hand scores (40) | each of the 5 | TBD | TBD |
+| qwen vs itself, temperature 0 (40) | all 5 | not applicable | TBD (exact agreement) |
 
 ### 3.5 Cost and throughput
 
