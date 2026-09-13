@@ -57,3 +57,58 @@ measured on the full `data/raw/twcs.csv` (2,811,774 rows) on 2026-09-11: the
   Known artifact, left unfixed.
   - Rejected: stripping every `@USER` form. That changes the embeddings and
     therefore the clusters the 8-intent taxonomy was merged from.
+
+## Evaluation scope (decided 2026-09-12, before the harness)
+
+Timing figures come from `python -m eval.latency` on 2026-09-12: 10 uncached
+calls per model, with placeholder draft and judge prompts.
+
+- **The golden set is 150 cases, not 200**: 120 stratified by intent (about 13
+  per intent) plus 30 hard cases. 150 is the brief's floor, and it cuts every
+  downstream stage by 25%.
+  - The sampling rules carry over: at most one case per near-duplicate group,
+    and none of the 46 cases quoted in `docs/taxonomy.md`, their threads or
+    their duplicate groups.
+  - Rejected: 200 cases.
+
+- **B0 and B1 make zero LLM calls by construction.** B0 emits a constant
+  reply; B1 is TF-IDF plus a nearest-neighbour copy of a past brand reply.
+  Only the no-RAG ablation and the full system call llama3.
+
+- **B0 is judged once per intent (9 calls) and the score reused**, because its
+  reply is the same sentence every time.
+  - This assumes the constant reply scores the same on every case of an
+    intent: checks that depend on the case, such as whether the reply
+    addresses the issue, are taken from one case per intent.
+  - Rejected: judging the same sentence 150 times.
+
+- **qwen2.5:7b judges everything; mistral:7b judges a 40-case sample only**,
+  to measure cross-judge agreement. Judging was about two-thirds of the timed
+  compute (13.6 of 20.3 h), and agreement between the two model families can
+  be measured on a sample.
+  - Rejected: both judges on every case.
+
+- **num_predict is 80 for drafts and 150 for judges, and the rubric quotes
+  evidence only for "no" answers.**
+  - Drafts: the 4 genuine timing drafts were 39 to 48 tokens (144 to 204
+    characters, 3.7 to 4.2 characters per token, so 280 characters is about 70
+    tokens). The other 6 hit the 120 cap because llama3 copied the taxonomy
+    block out of the prompt instead of replying (six identical 560-character
+    outputs), not because replies ran long. The harness's draft prompt has to
+    fix that.
+  - Judges: at 200 tokens with evidence for every check, qwen hit the cap on 1
+    of 10 calls and mistral on 2, with 1 judgement still unusable after
+    repair. The 150 cap relies on the shorter "no"-only evidence, which has
+    not been timed.
+  - Rejected: 120 for drafts and 200 for judges.
+
+- **Target: about 5.5 h for the full run, down from the 20.3 h baseline. Not
+  yet measured.** Applying the measured per-call medians to the new call
+  counts gives about 6.7 to 7.7 h, before the shorter judge outputs are
+  counted; the range depends on whether mistral's 40-case sample means 40
+  judgements or 40 per judged system. Re-time with the final prompts before
+  the overnight run.
+  - That arithmetic assumes one phi3 call per case for each LLM system (300
+    calls at 4.4 s), 300 llama3 drafts at 16.7 s (the median of the 4 genuine
+    drafts), 459 qwen judgements at 34.5 s (3 judged systems x 150, plus B0's
+    9) and mistral at 46.7 s per call.
