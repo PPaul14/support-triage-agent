@@ -1,5 +1,7 @@
 # support-triage-agent
 
+[![CI](https://github.com/PPaul14/support-triage-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/PPaul14/support-triage-agent/actions/workflows/ci.yml)
+
 An evaluated, fully local AI agent for first-line customer support triage.
 It classifies intent, drafts a reply grounded in the brand history, and
 decides auto-handle vs escalate with a stated reason. The evaluation is the
