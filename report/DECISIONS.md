@@ -112,3 +112,29 @@ calls per model, with placeholder draft and judge prompts.
     calls at 4.4 s), 300 llama3 drafts at 16.7 s (the median of the 4 genuine
     drafts), 459 qwen judgements at 34.5 s (3 judged systems x 150, plus B0's
     9) and mistral at 46.7 s per call.
+
+## Evaluation metrics (decided 2026-09-13, before any system is scored)
+
+- **Headline metric: auto-handle rate at a fixed harmful-auto-reply budget.**
+  A harmful auto-reply is a case labelled escalate that the system
+  auto-handled. It is SEVERE when the true intent is billing_subscription or
+  the case involves a compromised account, and ORDINARY otherwise. Hiver sells
+  a shared-inbox helpdesk, and deflection at a stated safety budget is the
+  number that maps to their product. The budget's value is TBD.
+  - Rejected: a single escalation F1. Escalation is a threshold decision with
+    asymmetric costs, and F1 weighs a harmful auto-reply the same as an
+    unnecessary escalation.
+
+- **Reply quality is judged with five binary checks, not a 1-5 scale:**
+  contains_unsupported_specific, advances_resolution,
+  addresses_stated_problem, tone_appropriate and would_send_unedited (the
+  headline quality metric). Each check can be validated on its own with
+  Cohen's kappa against hand scores.
+  - Evidence is quoted for the answer that fails the reply: the unsupported
+    span when contains_unsupported_specific is yes, and the reason when any
+    other check is no. This restates the earlier "evidence only for no
+    answers" rule, which assumed every check fails on no.
+  - Rationale: a 7B-class judge tends to bunch holistic ratings together,
+    which makes agreement on them meaningless. That is the expectation behind
+    the choice; it has not been measured in this project.
+  - Rejected: a holistic 1-5 quality score.

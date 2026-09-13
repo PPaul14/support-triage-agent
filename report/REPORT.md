@@ -114,15 +114,172 @@ What the timing numbers do not show:
 
 ## 3. Results vs two baselines
 
-Systems compared (`report/DECISIONS.md`, Evaluation scope): B0, a constant
-reply, and B1, a TF-IDF nearest-neighbour copy of a past brand reply, both
-with zero LLM calls; the no-RAG ablation; and the full system. Scores are to
-be reported both stratified and reweighted to the traffic mix, because the
-golden set is deliberately stratified rather than distribution-matched.
+Systems (`report/DECISIONS.md`, Evaluation scope): B0, a constant reply, and
+B1, a TF-IDF nearest-neighbour copy of a past brand reply, both with zero LLM
+calls; the no-RAG ablation; and the full system. Every score comes from the
+golden set: 150 cases planned (120 stratified by estimated intent, 30 hard
+cases), labelled: TBD.
 
-- Golden set: 150 cases planned (120 stratified by estimated intent, 30 hard
-  cases). Labelled: TBD.
-- Metrics and scores: TBD.
+Every value in this section is TBD. The section fixes what each metric is,
+why it was chosen and how it is reported, before any system is scored.
+
+### 3.1 Intent classification
+
+- **What:** macro-F1 over the 9 intents, per-class F1 with its support (the
+  number of golden cases of that class), and the 9 x 9 confusion matrix.
+- **Why macro-F1:** every intent counts equally, so a system cannot score
+  well by getting only the frequent intents right.
+- **Uncertainty:** a 95% bootstrap confidence interval on macro-F1, from
+  2,000 resamples of the golden cases with a fixed seed. With n = 150, most
+  differences between systems will be statistically indistinguishable, and
+  the report says so rather than letting a reader assume a ranking.
+- **Reported twice:**
+  - Stratified: on the golden set as labelled.
+  - Reweighted to the estimated population intent shares. Each case is
+    weighted by the population share of its labelled intent divided by that
+    intent's share of the golden set. The population shares are phi3's
+    estimate over the sampler's 1,500-case pool (values TBD), so the
+    reweighted figure inherits that estimate's error.
+  - The golden set is deliberately not distribution-matched, so the
+    stratified figure is not a production estimate.
+- **Applies to** the systems that predict an intent: the no-RAG ablation and
+  the full system. Whether B0 and B1 output an intent: TBD.
+
+| intent classification | B0 | B1 | no-RAG | full |
+|---|---|---|---|---|
+| macro-F1, stratified [95% CI] | TBD | TBD | TBD | TBD |
+| macro-F1, reweighted [95% CI] | TBD | TBD | TBD | TBD |
+
+Per-class F1 with support, and the confusion matrix: TBD.
+
+### 3.2 Escalation
+
+Escalation is a threshold decision with asymmetric costs: auto-handling a case
+that needed a human is worse than escalating one that did not. A single F1
+treats the two errors alike, so it is the wrong summary.
+
+- **Harmful auto-reply:** a case the golden label marks escalate that the
+  system auto-handled. Its rate is harmful auto-replies divided by all golden
+  cases, so it reads as a per-ticket rate (and, reweighted, as a production
+  rate).
+  - SEVERE when the true intent is billing_subscription or the case involves
+    a compromised account; ORDINARY otherwise. Both rates are reported.
+  - A compromised account is read from the golden label's escalate_reason
+    (how it is recorded: TBD; the labelling CLI stores the reason as free
+    text today).
+- **Precision and recall on the escalate class**, with escalate as the
+  positive class.
+- **Operating curve:** auto-handle rate on the x-axis against
+  harmful-auto-reply rate on the y-axis, sweeping the intent-confidence and
+  retrieval-similarity thresholds over a grid. Every grid point is plotted and
+  the frontier drawn. Only a system that computes a threshold has a curve:
+  the full system sweeps both, the no-RAG ablation has intent confidence
+  only, and B0 and B1 are single points.
+  - How intent confidence is obtained: TBD. Finding 2.2 is why its
+    calibration is checked on the golden set rather than assumed.
+  - Chosen operating point: TBD, stated with the reason for it.
+- **Headline metric: auto-handle rate at a fixed harmful-auto-reply budget.**
+  Hiver sells a shared-inbox helpdesk, and deflection at a stated safety
+  budget is the number that maps to their product. The budget: TBD.
+- **Layer attribution:** for every escalation, record which of the four
+  escalation layers fired (layer definitions: Section 2, TBD). Report, per
+  layer, how many escalations it fired on and how many it alone caught. If the
+  deterministic rules catch most escalations, that is a finding about how
+  little of the safety comes from the model.
+
+| escalation | B0 | B1 | no-RAG | full |
+|---|---|---|---|---|
+| auto-handle rate at the budget (headline) | TBD | TBD | TBD | TBD |
+| harmful auto-reply rate, severe | TBD | TBD | TBD | TBD |
+| harmful auto-reply rate, ordinary | TBD | TBD | TBD | TBD |
+| escalate precision | TBD | TBD | TBD | TBD |
+| escalate recall | TBD | TBD | TBD | TBD |
+
+### 3.3 Reply quality
+
+Five binary checks instead of a 1-5 scale: a 7B-class judge tends to bunch
+holistic ratings together, which makes agreement on them meaningless
+(`report/DECISIONS.md`, Evaluation metrics). qwen2.5 7B judges every reply;
+B0's constant reply is judged once per intent and the verdict reused
+(`report/DECISIONS.md`, Evaluation scope).
+
+| check | "yes" means | a good reply answers |
+|---|---|---|
+| contains_unsupported_specific | the reply states a number, date, duration or policy that is absent from the evidence; the judge must quote the span, or answer no | no |
+| advances_resolution | the reply gives a concrete step, rather than only moving the conversation to DM | yes |
+| addresses_stated_problem | the reply responds to the problem the customer actually raised | yes |
+| tone_appropriate | the reply is polite and in the brand's voice | yes |
+| would_send_unedited | the reply could be sent as written, with no edits | yes |
+
+- **Evidence** is the case itself (the customer message and its prior turns)
+  plus the retrieved precedents. The no-RAG ablation retrieves nothing, so its
+  evidence is the case alone.
+- **Reported** as a per-system rate for each check. would_send_unedited is
+  the headline quality metric and carries a 95% bootstrap CI (2,000
+  resamples).
+
+| reply quality (rate) | B0 | B1 | no-RAG | full |
+|---|---|---|---|---|
+| contains_unsupported_specific | TBD | TBD | TBD | TBD |
+| advances_resolution | TBD | TBD | TBD | TBD |
+| addresses_stated_problem | TBD | TBD | TBD | TBD |
+| tone_appropriate | TBD | TBD | TBD | TBD |
+| would_send_unedited [95% CI] (headline) | TBD | TBD | TBD | TBD |
+
+### 3.4 Judge validation
+
+- **Against a human:** I hand-score 60 replies on the same five checks.
+  Reported: Cohen's kappa per check, plus raw agreement on
+  would_send_unedited.
+- **Self-consistency:** qwen re-judges 40 replies at temperature 0, and the
+  exact-agreement rate is reported. Non-determinism here bounds every quality
+  number downstream. The re-runs must bypass the disk cache in `src/llm.py`:
+  an identical prompt at temperature 0 is otherwise served from the cache, and
+  agreement would be 100% by construction. How the harness bypasses it: TBD.
+- **Cross-judge:** mistral 7B judges 40 (case, system) pairs that qwen also
+  judged. Reported: kappa against qwen and against my hand scores. Kappa
+  against my scores needs the 40 pairs to come from the 60 I hand-score.
+- A low kappa is reported as a finding, not hidden: it would mean the quality
+  numbers are directional only.
+
+| judge validation | value |
+|---|---|
+| kappa, qwen vs hand scores, per check | TBD |
+| raw agreement, qwen vs hand scores, would_send_unedited | TBD |
+| qwen self-consistency, exact agreement on 40 | TBD |
+| kappa, mistral vs qwen | TBD |
+| kappa, mistral vs hand scores | TBD |
+
+### 3.5 Cost and throughput
+
+- **Median seconds per call by stage**, computed from `cache_hit=False` rows
+  of `artifacts/llm_calls.jsonl` only: a cached call measures a disk read,
+  not inference.
+- **Tickets per hour on this machine**, for the stages a live system would
+  run per ticket. Judging is evaluation only and is excluded.
+- **Cost of the same volume on a hosted small model**: a named model's
+  published per-token price on a stated date, applied to the measured prompt
+  and output token counts. No hosted model is called. Model, price and total:
+  TBD.
+
+| cost and throughput | value |
+|---|---|
+| median s/call, classify / draft / judge | TBD |
+| tickets per hour, this machine | TBD |
+| cost of the same volume, hosted small model | TBD |
+
+### 3.6 Reference similarity (diagnostic only, never a headline)
+
+- ROUGE-L between each system's reply and the brand's real reply, reported
+  once.
+- It is reported with this caveat: 31.6% of the brand's real replies move the
+  customer to DM (finding 1.1), so a constant DM hand-off scores well on
+  ROUGE-L by construction. Whether B0's constant reply is one: TBD. Imitating
+  an often-unhelpful reference is not quality.
+
+| reference similarity | B0 | B1 | no-RAG | full |
+|---|---|---|---|---|
+| ROUGE-L vs brand_reply (diagnostic) | TBD | TBD | TBD | TBD |
 
 ## 4. Failure analysis: top 5 failure modes
 
