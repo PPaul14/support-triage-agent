@@ -196,3 +196,19 @@ calls per model, with placeholder draft and judge prompts.
   module that talks to Ollama matters more than four lines.
   - Rejected: a second Ollama client for re-runs, which would break the rule
     that every LLM call goes through `src/llm.py`.
+
+## Golden set (`src/golden.py`)
+
+- **The stratification estimate is read from cached phi3 predictions only,
+  and the sampler makes no model call.** N = 1,500 cached predictions, the
+  full planned pool: the pass finished on 2026-09-15 (a 60.0 min run, 866 of
+  the predictions being new) before the sampler was switched to reading the
+  cache. The shares are used only to stratify and are never labels. Every
+  intent must have at least 20 cached estimates left after the hard cases are
+  removed, or the sampler stops and names the shortfall. The cache-only
+  re-run rebuilt a byte-identical pool.
+  - The earlier attempt was slow in wall-clock (645 logged calls over 4 h
+    11 min, with a median of 4.0 s between calls) because of long pauses, not
+    slow calls.
+  - Rejected: calling phi3 from inside the sampler, which ties every sampling
+    run to the model being available and to its pace.
