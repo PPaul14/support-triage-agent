@@ -326,6 +326,13 @@ TBD. This needs the labelled golden set and the systems' outputs.
 Mandatory. TBD: there is no headline number yet. Findings 1.1, 1.2 and 2.2
 bear on it.
 
+**A zero is a bound, not a zero.** Zero observed SEVERE harmful auto-replies
+in N budget-relevant cases does not mean the true rate is zero: by the rule of
+three, the 95% upper bound on that rate is about 3/N. N is the number of
+golden cases labelled escalate whose intent is billing_subscription or whose
+`compromised` field is true (value TBD). Any zero reported here is stated in
+the same sentence as N and that bound.
+
 ## 6. What I'd do next with one more week
 
 TBD.
