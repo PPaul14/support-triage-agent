@@ -17,6 +17,12 @@ CLEAN_JSONL = REPO_ROOT / "data" / "sample" / "cases_clean.jsonl"
 POOL_JSONL = REPO_ROOT / "data" / "golden" / "golden_pool.jsonl"
 GOLDEN_JSONL = REPO_ROOT / "data" / "golden" / "golden_set.jsonl"
 BLIND_EVERY = 5  # with --assist, pool positions 5, 10, 15, ... are labelled with the suggestion hidden
+KEY_BLOCK = ("  1 billing  2 login  3 playback  4 playlists/downloads  5 not available\n"
+             "  6 feature request  7 reply, problem not named  8 thanks/chatter  9 unclear\n"
+             "  compromised: n unless someone else got into their account\n"
+             "  escalate: y for 1, 2 with hacking, 9, and 7 without enough context. n otherwise.\n"
+             "  difficulty: 1 obvious  2 paused  3 torn        notes: Enter to skip")
+REASONS = {"1": "needs account data", "2": "account compromised", "3": "cannot determine intent"}
 
 
 @dataclass
@@ -48,6 +54,7 @@ def ask(prompt: str, allowed: list[str] | None = None) -> str:
 def show(case: dict, position: int, total: int, intents: list[str], counts: Counter[str]) -> None:
     """Print the case the way the labeller sees it: prior turns and the customer message, nothing else."""
     print(f"\n{'=' * 72}\ncase {position}/{total}   (case_id {case['case_id']})")
+    print(KEY_BLOCK)
     if case["prior_turns"]:
         print("\nEarlier in the thread:")
         for turn in case["prior_turns"]:
@@ -83,17 +90,10 @@ def main() -> None:
     assist = parser.parse_args().assist
     sys.stdout.reconfigure(encoding="utf-8")  # tweets contain emoji; a Windows pipe defaults to cp1252
     intents, _ = classify.parse_taxonomy(classify.TAXONOMY_MD.read_text(encoding="utf-8"))
-    pool_ids = []
-    with POOL_JSONL.open(encoding="utf-8") as handle:
-        for line in handle:
-            pool_ids.append(json.loads(line)["case_id"])
+    pool_ids = [json.loads(line)["case_id"] for line in POOL_JSONL.read_text(encoding="utf-8").splitlines()]
     wanted = set(pool_ids)
-    cases = {}
-    with CLEAN_JSONL.open(encoding="utf-8") as handle:
-        for line in handle:
-            case = json.loads(line)
-            if case["case_id"] in wanted:
-                cases[case["case_id"]] = case
+    all_cases = [json.loads(line) for line in CLEAN_JSONL.read_text(encoding="utf-8").splitlines()]
+    cases = {case["case_id"]: case for case in all_cases if case["case_id"] in wanted}
     done: set[int] = set()
     counts: Counter[str] = Counter()
     assisted_labels: list[Label] = []  # for the running override rate
@@ -105,7 +105,7 @@ def main() -> None:
                 counts[label.intent] += 1
                 if label.mode == "assisted":
                     assisted_labels.append(label)
-    print(f"{len(done)}/{len(pool_ids)} already labelled. Type q at any prompt to stop; nothing is lost.")
+    print(f"{len(done)}/{len(pool_ids)} already labelled. Type q at any prompt to stop; nothing is lost.\n{KEY_BLOCK}")
     proposed = suggestions([cases[i] for i in pool_ids if i not in done], intents) if assist else {}
 
     for position, case_id in enumerate(pool_ids, start=1):  # the pool's order is the labelling order
@@ -122,7 +122,9 @@ def main() -> None:
         intent = suggestion if number == "" else intents[int(number) - 1]
         compromised = ask("compromised account, someone else got in [y/n]: ", ["y", "n"]).lower() == "y"
         escalate = ask("escalate [y/n]: ", ["y", "n"]).lower() == "y"
-        reason = ask("escalate reason: ") if escalate else ""
+        reason = ask("escalate reason [1 needs account data, 2 account compromised, 3 cannot determine intent, "
+                     "or type it]: ") if escalate else ""
+        reason = REASONS.get(reason, reason)  # a single digit 1-3 is a shortcut; anything else is kept as typed
         difficulty = ask("difficulty [1 easy, 2 medium, 3 hard]: ", ["1", "2", "3"])
         notes = ask("notes (Enter to skip): ")
         mode = "blind" if blind else "assisted"
