@@ -51,8 +51,9 @@ and `URL` placeholders.
   of the predictions being new. The sampler now reads the predictions from the
   disk cache and makes no model call, and re-running it rebuilt a
   byte-identical pool.
-- **The estimate is never a label.** It only decides which cases get sampled,
-  and the labelling CLI never shows it. A case in stratum
+- **The estimate is never a label.** It decides which cases get sampled, and
+  the labelling CLI shows it only with `--assist`, as a suggestion I accept
+  or override (see Model-assisted labelling below). A case in stratum
   `estimated:billing_subscription` may well be labelled something else.
 - Estimated intents over the 1,500 (not labels): content_unavailable 314,
   billing_subscription 226, feature_request 198, other_unclear 174,
@@ -83,11 +84,25 @@ arriving as one block.
 ## What the labelling CLI shows and records
 
 - **Shows:** the customer message and its prior turns. It never shows the
-  brand's real reply, the language tag, the stratum or the phi3 estimate,
-  because each would anchor the label.
+  brand's real reply, the language tag or the stratum, because each would
+  anchor the label.
+- **With `--assist`** it also shows phi3's proposed intent as a suggestion:
+  Enter accepts it, a digit overrides it. Every 5th pool position stays
+  blind, with the suggestion hidden, so the anchoring can be measured. The
+  suggestion covers the intent only; compromised, escalate, difficulty and
+  notes are always mine. Suggestions come from the compact classifier prompt,
+  read from the sampler's cache where they exist (121 of the 150) and made
+  live otherwise.
 - **Records per case:** intent (one of the 9), compromised (true/false),
   escalate (y/n), escalate_reason (free text, when escalating), difficulty
-  (1 to 3), notes (free text) and labelled_at (UTC).
+  (1 to 3), notes (free text), labelled_at (UTC), proposed_intent (phi3's
+  suggestion, recorded even when hidden), accepted (whether my intent matched
+  a shown suggestion) and mode (assisted, blind, or manual for cases
+  labelled without `--assist`).
+- **Override statistics:** `python -m eval.label_stats` computes the override
+  rate, overall and per intent, and phi3's agreement on blind against
+  assisted cases, prints them and writes the Model-assisted labelling
+  section at the end of this file.
 
 ## Not distribution-matched
 

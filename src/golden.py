@@ -22,8 +22,6 @@ PLACEHOLDERS = {"@USER", "URL"}
 CHARGE = re.compile(r"\b(charg(e|ed|es|ing)|paid|payments?|billed|billing|refund(ed|s)?|debit(ed)?)\b", re.IGNORECASE)
 FAILURE = re.compile(r"\b(bugs?|crash(es|ed|ing)?|errors?|broken|glitch\w*|freez\w*|frozen|not working|stopped "
                      r"(working|playing)|(doesn'?t|won'?t|isn'?t|can'?t) (work|play|load|open)(ing)?)\b", re.IGNORECASE)
-INSTRUCTION = ("\nEstimate which intent from the list above fits the customer message below. "
-               'Reply with JSON only, in the form {"intent": "<intent name>"}.\n\n')
 
 
 @dataclass
@@ -89,13 +87,11 @@ def pick_hard(eligible: list[dict], rng: random.Random) -> dict[int, str]:
 
 def cached_estimates(cases: list[dict], block: str, order: list[str]) -> dict[int, str]:
     """phi3's intent ESTIMATE per case, read from the disk cache: no model call; uncached cases are skipped."""
-    schema = {"type": "object", "properties": {"intent": {"type": "string", "enum": order}}, "required": ["intent"]}
+    schema = classify.intent_schema(order)
     options = {"temperature": 0.0, "num_ctx": 4096, "num_predict": 32, "seed": llm.SEED}  # exactly what complete() sent
     estimates: dict[int, str] = {}
     for case in cases:
-        lines = [f"Earlier {turn['role']} message: {turn['text']}" for turn in case["prior_turns"][-2:]]
-        lines.append(f"Customer message: {case['customer_text']}")
-        key = llm._cache_key(classify.CLASSIFY_MODEL, block + INSTRUCTION + "\n".join(lines), None, schema, options)
+        key = llm._cache_key(classify.CLASSIFY_MODEL, classify.intent_prompt(case, block), None, schema, options)
         cache_path = llm.CACHE_DIR / f"{key}.json"
         if cache_path.exists():  # a drifted prompt or option reads as "not cached", never as a model call
             stored = json.loads(cache_path.read_text(encoding="utf-8"))

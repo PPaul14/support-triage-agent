@@ -20,6 +20,10 @@ EXAMPLES_PER_INTENT = 2
 MAX_EXAMPLE_CHARS = 120
 EXAMPLE_LINE = re.compile(r'^- \[case \d+\] "(.*?)"(?=$| →| \()')  # the quote ends where a note or label starts
 ORDER_LINE = re.compile(r"^\d+\. (\w+)$")
+# The intent question asked after the block. golden.py's estimates and label.py's suggestions share it, and so
+# share cache entries.
+ESTIMATE_INSTRUCTION = ("\nEstimate which intent from the list above fits the customer message below. "
+                        'Reply with JSON only, in the form {"intent": "<intent name>"}.\n\n')
 
 
 @dataclass
@@ -80,6 +84,18 @@ def render_block(text: str) -> str:
         for example in section.examples[:EXAMPLES_PER_INTENT]:
             lines.append(f'- "{shorten(example)}"')
     return "\n".join(lines) + "\n"
+
+
+def intent_prompt(case: dict, block: str) -> str:
+    """The block first, then the question, then the case LAST: its two latest earlier turns and the message."""
+    lines = [f"Earlier {turn['role']} message: {turn['text']}" for turn in case["prior_turns"][-2:]]
+    lines.append(f"Customer message: {case['customer_text']}")
+    return block + ESTIMATE_INSTRUCTION + "\n".join(lines)
+
+
+def intent_schema(intents: list[str]) -> dict:
+    """JSON schema for exactly one intent name from the taxonomy."""
+    return {"type": "object", "properties": {"intent": {"type": "string", "enum": intents}}, "required": ["intent"]}
 
 
 def main() -> None:

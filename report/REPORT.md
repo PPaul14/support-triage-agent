@@ -333,6 +333,18 @@ golden cases labelled escalate whose intent is billing_subscription or whose
 `compromised` field is true (value TBD). Any zero reported here is stated in
 the same sentence as N and that bound.
 
+**Model-assisted labels.** The golden labels are model-assisted: phi3 with the
+compact classifier prompt, the same model and prompt family as the classify
+stage, proposed an intent that I accepted or overrode, except at every 5th
+pool position, which I labelled blind. A suggested label can anchor the
+annotator, so agreement between my labels and the classifier is inflated
+relative to labelling from scratch. The evidence for how much: the override
+rate on assisted cases (TBD), which is a lower bound on independent
+judgement, and phi3's agreement with my blind labels (TBD) against its
+agreement with my assisted labels (TBD), which measures the anchoring
+directly. `data/golden/labeling_notes.md` holds the figures, written by
+`python -m eval.label_stats`.
+
 ## 6. What I'd do next with one more week
 
 TBD.
