@@ -51,6 +51,5 @@ is billing_subscription. The full order when two intents fit: 1 billing >
 
 ## Known correction
 
-- **case_id 664584** was labelled compromised = y by mistake. Correct it to
-  compromised = n before the golden set is used. Do not edit
-  `data/golden/golden_set.jsonl` while labelling is still appending to it.
+- **case_id 664584** was labelled compromised = y by mistake. Corrected to
+  compromised = n on 2026-09-15, and its leftover test note "hi" cleared.

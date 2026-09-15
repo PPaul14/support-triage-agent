@@ -1,4 +1,4 @@
-"""Golden set, part 1: sample the 150 cases to hand-label (python -m src.golden). Makes no model call."""
+"""Golden set, part 1: sample the 150 golden-set cases (python -m src.golden). Makes no model call."""
 
 import json
 import random
@@ -29,7 +29,7 @@ class PoolEntry:
     case_id: int
     thread_id: int
     dup_group_id: int | None
-    stratum: str  # "hard:<rule>" or "estimated:<intent>"; the estimate is phi3's, never a label
+    stratum: str  # "hard:<rule>" or "estimated:<intent>": how the case was sampled, not its label
 
 
 def load_eligible(taxonomy: str) -> tuple[list[dict], set[int], set[int], set[int]]:

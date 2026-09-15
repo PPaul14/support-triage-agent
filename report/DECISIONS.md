@@ -203,7 +203,8 @@ calls per model, with placeholder draft and judge prompts.
   and the sampler makes no model call.** N = 1,500 cached predictions, the
   full planned pool: the pass finished on 2026-09-15 (a 60.0 min run, 866 of
   the predictions being new) before the sampler was switched to reading the
-  cache. The shares are used only to stratify and are never labels. Every
+  cache. At sampling time the shares only stratified; the same cached predictions
+  later became the model labels (Golden set labels, below). Every
   intent must have at least 20 cached estimates left after the hard cases are
   removed, or the sampler stops and names the shortfall. The cache-only
   re-run rebuilt a byte-identical pool.
@@ -212,3 +213,37 @@ calls per model, with placeholder draft and judge prompts.
     slow calls.
   - Rejected: calling phi3 from inside the sampler, which ties every sampling
     run to the model being available and to its pace.
+
+## Golden set labels (decided 2026-09-15)
+
+- **The golden set is model-labelled, not hand-labelled.** 147 of the 150
+  cases carry phi3's cached intent estimate plus rule-derived escalate and
+  compromised fields (`mode: "model"`); 3 were labelled by me. 40 of the 147
+  are audited blind by me.
+  - Rejected: labelling all 150 by hand.
+
+- **Intent metrics are scored only against the 43 human labels** (the 40
+  audit labels plus the 3 by me). A model label is phi3's answer to the
+  classifier's own prompt, so if the classify stage uses that prompt, as
+  `src/classify.py` is built for, its prediction on a model-labelled case is
+  the label itself, and macro-F1 there is 1.0 by construction.
+  - Rejected: scoring intent against all 150 labels.
+
+- **escalate and compromised on the model labels follow the guideline's
+  rules**: compromised by a keyword rule over the customer's own text, and
+  escalate for a compromised account, billing_subscription, other_unclear, or
+  followup_diagnostic with no earlier turns.
+  - Rejected: escalate from the intent alone with compromised always false,
+    which would miss compromised accounts, the SEVERE category.
+
+- **The audit is 40 cases drawn with `random.Random(0)` from the sorted
+  model-labelled case ids and labelled blind** (`python -m src.label audit`).
+  The answers go to `audit_labels.jsonl`, apart from the model labels.
+
+- **The --assist labelling mode was removed**; model labelling replaced it.
+  It had been used for one case, 2363279 (phi3 suggested feature_request, I
+  overrode it to library_playlists). That row is kept as written and counts
+  as a human label.
+
+- **Case 664584 was corrected**: compromised y to n, and a leftover test note
+  cleared.

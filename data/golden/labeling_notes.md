@@ -1,10 +1,33 @@
 # Golden set: labelling notes
 
-`data/golden/golden_pool.jsonl` lists the 150 cases to hand-label, in
-labelling order. It holds case ids and strata only; `python -m src.label`
-looks up each case's text in `data/sample/cases_clean.jsonl` as it shows it.
-Labels are appended to `data/golden/golden_set.jsonl`, one line per case, as
-each case is finished.
+**The golden set is MODEL-LABELLED, not hand-labelled.** 147 of its 150 cases
+carry phi3's intent plus rule-derived escalate and compromised fields
+(`mode: "model"`); 3 were labelled by me before model labelling was adopted
+(see "3 labels by me" below). 40 of the 147 were then labelled independently
+by me, blind, as an audit. Agreement between my audit labels and the model
+labels: TBD until the audit is done; `python -m eval.label_stats` then writes
+it into the Human audit section at the end of this file.
+
+The classifier under evaluation and these labels come from the same model
+family (phi3) and the same taxonomy, so any agreement between them is partly
+shared error rather than accuracy, and macro-F1 against the model labels
+measures consistency with phi3, not correctness. For the phi3 systems it is
+stronger than that: a model label is phi3's answer to the classifier's own
+prompt, so on a model-labelled case their intent prediction is the label
+itself. Intent metrics are therefore scored only against the 43 human
+labels: the 40 audit labels plus the 3 labelled by me.
+
+## Files
+
+| file | holds |
+|---|---|
+| `golden_pool.jsonl` | the 150 case ids and their sampling strata, frozen |
+| `golden_set.jsonl` | one label per case: intent, compromised, escalate, escalate_reason, difficulty, notes, labelled_at, mode |
+| `audit_queue.jsonl` | the 40 case ids to audit, in audit order |
+| `audit_labels.jsonl` | my blind audit labels (`audit_intent`), kept apart from `golden_set.jsonl` |
+
+None of them holds message text: the CLI looks each case up in
+`data/sample/cases_clean.jsonl` as it shows it.
 
 ## How the pool was drawn
 
@@ -41,7 +64,7 @@ and `URL` placeholders.
 | hard:short_reply | has prior turns and fewer than 5 content words | 1,310 | 6 |
 | hard:longest | the 6 longest messages | 39,177 | 6 |
 
-### Stratified cases: 120, by a phi3 intent ESTIMATE
+### Stratified cases: 120, by a phi3 intent estimate
 
 - A 1,500-case pool was drawn from the eligible cases (seed 0, the first
   draw), and phi3 (`phi3:3.8b-mini-128k-instruct-q4_0`) estimated each case's
@@ -51,11 +74,9 @@ and `URL` placeholders.
   of the predictions being new. The sampler now reads the predictions from the
   disk cache and makes no model call, and re-running it rebuilt a
   byte-identical pool.
-- **The estimate is never a label.** It decides which cases get sampled, and
-  the labelling CLI shows it only with `--assist`, as a suggestion I accept
-  or override (see Model-assisted labelling below). A case in stratum
-  `estimated:billing_subscription` may well be labelled something else.
-- Estimated intents over the 1,500 (not labels): content_unavailable 314,
+- The estimate decided which cases were sampled. For the 147 model-labelled
+  cases, the same cached prediction later became the intent label.
+- Estimated intents over the 1,500: content_unavailable 314,
   billing_subscription 226, feature_request 198, other_unclear 174,
   account_access 168, followup_diagnostic 156, playback_failure 116,
   library_playlists 81, chatter_thanks 67.
@@ -76,33 +97,51 @@ and `URL` placeholders.
 | estimated:chatter_thanks | 13 |
 | estimated:other_unclear | 13 |
 
-### Labelling order
+### Pool order
 
 The 150 are shuffled (seed 0), so the hard cases are mixed in rather than
 arriving as one block.
 
-## What the labelling CLI shows and records
+## How the labels were made
 
-- **Shows:** the customer message and its prior turns. It never shows the
-  brand's real reply, the language tag or the stratum, because each would
-  anchor the label.
-- **With `--assist`** it also shows phi3's proposed intent as a suggestion:
-  Enter accepts it, a digit overrides it. Every 5th pool position stays
-  blind, with the suggestion hidden, so the anchoring can be measured. The
-  suggestion covers the intent only; compromised, escalate, difficulty and
-  notes are always mine. Suggestions come from the compact classifier prompt,
-  read from the sampler's cache where they exist (121 of the 150) and made
-  live otherwise.
-- **Records per case:** intent (one of the 9), compromised (true/false),
-  escalate (y/n), escalate_reason (free text, when escalating), difficulty
-  (1 to 3), notes (free text), labelled_at (UTC), proposed_intent (phi3's
-  suggestion, recorded even when hidden), accepted (whether my intent matched
-  a shown suggestion) and mode (assisted, blind, or manual for cases
-  labelled without `--assist`).
-- **Override statistics:** `python -m eval.label_stats` computes the override
-  rate, overall and per intent, and phi3's agreement on blind against
-  assisted cases, prints them and writes the Model-assisted labelling
-  section at the end of this file.
+### 3 labels by me
+
+- Cases 664584 and 930008 (`mode: "manual"`), labelled with
+  `python -m src.label` before model labelling was adopted.
+- Case 2363279 (`mode: "assisted"`), labelled with the since-removed
+  `--assist` mode: phi3 suggested feature_request and I overrode it to
+  library_playlists. It counts as a human label; its row is kept as written.
+- Correction applied on 2026-09-15: case 664584 had been recorded with
+  compromised = y by mistake and is now n, and its leftover test note "hi"
+  was cleared.
+
+### 147 model labels
+
+- Written by `python -m src.model_label`, which makes no model call.
+- **intent:** the sampler's cached phi3 estimate (the compact classifier
+  prompt).
+- **compromised:** a keyword rule over the customer's own text (the message
+  and the customer's earlier turns): hack, hijack, someone or somebody else,
+  someone changed / logged / is using / was using, not my device or account,
+  isn't mine, unknown device, without me knowing.
+- **escalate**, following the guideline, with the first matching reason:
+  compromised ("account compromised"), billing_subscription ("needs account
+  data"), other_unclear ("cannot determine intent"), followup_diagnostic with
+  no earlier turns ("cannot interpret without earlier turns"). Otherwise not
+  escalated.
+- **difficulty** is null and **notes** are empty.
+
+### The 40-case audit
+
+- Drawn from the 147 model-labelled case ids, sorted, with
+  `random.Random(0)`.
+- `python -m src.label audit` shows each case blind: the customer message and
+  its earlier turns only, never the model's label, the stratum, the language
+  tag or the brand's reply. It asks for the intent only and appends my answer
+  to `audit_labels.jsonl`.
+- `python -m eval.label_stats` then reports agreement with a Wilson 95%
+  interval, and per-intent agreement for intents with at least 5 audited
+  cases.
 
 ## Not distribution-matched
 
@@ -111,3 +150,9 @@ over-samples rare intents, and 30 hard cases are added on purpose. Every
 metric must therefore be reported both stratified (on the set as labelled)
 and reweighted to the estimated population intent shares (`report/REPORT.md`,
 Section 3.1). A stratified figure alone is not a production estimate.
+
+<!-- audit_stats: start -->
+## Human audit: agreement with the model labels
+
+Not audited yet: 0 of 40. Agreement: TBD.
+<!-- audit_stats: end -->

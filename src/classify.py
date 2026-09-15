@@ -20,8 +20,8 @@ EXAMPLES_PER_INTENT = 2
 MAX_EXAMPLE_CHARS = 120
 EXAMPLE_LINE = re.compile(r'^- \[case \d+\] "(.*?)"(?=$| →| \()')  # the quote ends where a note or label starts
 ORDER_LINE = re.compile(r"^\d+\. (\w+)$")
-# The intent question asked after the block. golden.py's estimates and label.py's suggestions share it, and so
-# share cache entries.
+# The intent question asked after the block. golden.py's estimates use it, and src/model_label.py turns those
+# cached estimates into the model labels.
 ESTIMATE_INSTRUCTION = ("\nEstimate which intent from the list above fits the customer message below. "
                         'Reply with JSON only, in the form {"intent": "<intent name>"}.\n\n')
 

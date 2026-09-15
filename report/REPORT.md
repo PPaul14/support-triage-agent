@@ -117,8 +117,9 @@ What the timing numbers do not show:
 Systems (`report/DECISIONS.md`, Evaluation scope): B0, a constant reply, and
 B1, a TF-IDF nearest-neighbour copy of a past brand reply, both with zero LLM
 calls; the no-RAG ablation; and the full system. Every score comes from the
-golden set: 150 cases planned (120 stratified by estimated intent, 30 hard
-cases), labelled: TBD.
+golden set: 150 cases (120 stratified by estimated intent, 30 hard cases).
+147 are model-labelled by phi3 plus rules and 3 are labelled by me; 40 of
+the 147 are audited blind by me (Section 5, `data/golden/labeling_notes.md`).
 
 Every value in this section is TBD. The section fixes what each metric is,
 why it was chosen and how it is reported before any system is scored, and the
@@ -134,18 +135,23 @@ stands.
 
 ### 3.1 Intent classification
 
+- **Ground truth: the 43 human labels only**, my 40 blind audit labels plus
+  the 3 cases I labelled. The other 147 intent labels are phi3's own answers
+  to the classifier's prompt, so scoring the phi3 systems against them would
+  compare phi3 with itself (Section 5).
 - **What:** macro-F1 over the 9 intents, per-class F1 with its support (the
-  number of golden cases of that class), and the 9 x 9 confusion matrix.
+  number of human-labelled cases of that class), and the 9 x 9 confusion
+  matrix.
 - **Why macro-F1:** every intent counts equally, so a system cannot score
   well by getting only the frequent intents right.
 - **Uncertainty:** a 95% bootstrap confidence interval on each system's
-  macro-F1, from 2,000 resamples of the golden cases with a fixed seed. With
-  n = 150, most differences between systems will be statistically
+  macro-F1, from 2,000 resamples of the 43 human-labelled cases with a fixed
+  seed. With n = 43, most differences between systems will be statistically
   indistinguishable, and the report says so rather than letting a reader
   assume a ranking. Differences are tested as above, never by comparing these
   intervals.
 - **Reported twice:**
-  - Stratified: on the golden set as labelled.
+  - Stratified: on the 43 human-labelled cases as sampled.
   - Reweighted to the estimated population intent shares. Each case is
     weighted by the population share of its labelled intent divided by that
     intent's share of the golden set. The population shares are phi3's
@@ -176,6 +182,9 @@ treats the two errors alike, so it is the wrong summary.
     by escalate cases only would restate 1 - recall.
   - SEVERE when the true intent is billing_subscription or the golden label's
     `compromised` field is true; ORDINARY otherwise. Both rates are reported.
+  - On the 147 model-labelled cases, escalate and compromised come from
+    rules applied to phi3's intent (Section 5), so a system whose escalation
+    uses the same rules agrees with them by construction.
 - **Precision and recall on the escalate class**, with escalate as the
   positive class.
 - **Pre-registered safety budget**, fixed before any system is scored so the
@@ -333,16 +342,21 @@ golden cases labelled escalate whose intent is billing_subscription or whose
 `compromised` field is true (value TBD). Any zero reported here is stated in
 the same sentence as N and that bound.
 
-**Model-assisted labels.** The golden labels are model-assisted: phi3 with the
-compact classifier prompt, the same model and prompt family as the classify
-stage, proposed an intent that I accepted or overrode, except at every 5th
-pool position, which I labelled blind. A suggested label can anchor the
-annotator, so agreement between my labels and the classifier is inflated
-relative to labelling from scratch. The evidence for how much: the override
-rate on assisted cases (TBD), which is a lower bound on independent
-judgement, and phi3's agreement with my blind labels (TBD) against its
-agreement with my assisted labels (TBD), which measures the anchoring
-directly. `data/golden/labeling_notes.md` holds the figures, written by
+**The evaluation set is MODEL-LABELLED, not hand-labelled.** 147 of the 150
+golden cases carry phi3's intent plus rule-derived escalate and compromised
+fields; 3 were labelled by me, one of them with a phi3 suggestion shown. 40
+of the 147 were independently labelled by me, blind, and agreement with the
+model labels is TBD (Wilson 95% interval TBD) until that audit is done. The
+classifier and the labels come from the same model family and the same
+taxonomy, so any agreement between them is partly shared error rather than
+accuracy, and macro-F1 against these labels measures consistency with phi3
+rather than correctness. For the phi3 systems it is stronger than that: a
+model label is phi3's answer to the classifier's own prompt, so on those
+cases the classifier's prediction is the label itself. Intent metrics are
+therefore scored only on the 43 human-labelled cases (Section 3.1). The
+escalate labels on the 147 come from rules, so a system whose escalation uses
+the same rules agrees with them by construction; the audit checks the intent
+only. `data/golden/labeling_notes.md` holds the audit figures, written by
 `python -m eval.label_stats`.
 
 ## 6. What I'd do next with one more week

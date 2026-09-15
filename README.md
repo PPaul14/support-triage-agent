@@ -53,7 +53,8 @@ with the draft model.
 - `tests/` - unit tests
 - `data/raw/` - source data (not committed)
 - `data/sample/` - small sample for quick runs
-- `data/golden/` - hand-labelled golden set
+- `data/golden/` - golden set: phi3 labels plus a 40-case blind human audit
+  (`data/golden/labeling_notes.md`)
 - `artifacts/` - LLM cache, call log, run traces
 - `report/` - evaluation write-up
 

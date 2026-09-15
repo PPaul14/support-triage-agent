@@ -1,7 +1,7 @@
 # Intent taxonomy: labelling guideline
 
 This file is the single source of truth for intents. It is used twice: as the
-instruction sheet for hand-labelling the golden set, and as the few-shot
+instruction sheet for my own golden-set labels (the blind audit), and as the few-shot
 section of the classifier prompt. `python -m src.classify` renders a compact
 view of it for the prompt (`artifacts/classifier_prompt.txt`) from each
 intent's Summary line, its first two examples and the tie-break order, so
