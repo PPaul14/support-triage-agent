@@ -17,3 +17,4 @@ artifacts/llm_cache/
 artifacts/embeddings/
 artifacts/llm_calls.jsonl
 artifacts/clusters.md
+artifacts/traces.jsonl

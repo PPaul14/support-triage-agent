@@ -160,7 +160,8 @@ stands.
   - The golden set is deliberately not distribution-matched, so the
     stratified figure is not a production estimate.
 - **Applies to** the systems that predict an intent: the no-RAG ablation and
-  the full system. Whether B0 and B1 output an intent: TBD.
+  the full system, and B0 and B1 as well: B0 outputs the majority intent and
+  B1 a TF-IDF classifier's intent (`report/DECISIONS.md`, Pipeline).
 
 | intent classification | B0 | B1 | no-RAG | full |
 |---|---|---|---|---|
@@ -206,8 +207,10 @@ treats the two errors alike, so it is the wrong summary.
   only, and B0 and B1 are single points.
   - The operating point is the grid point with the highest auto-handle rate
     that stays within the budget. Chosen point: TBD.
-  - How intent confidence is obtained: TBD. Finding 2.2 is why its
-    calibration is checked on the golden set rather than assumed.
+  - Intent confidence is the probability phi3 gave the intent it wrote,
+    from Ollama's token logprobs (`report/DECISIONS.md`, Pipeline).
+    Finding 2.2 is why its calibration is checked on the golden set rather
+    than assumed.
 - **Headline metric: auto-handle rate at that operating point.** Hiver sells
   a shared-inbox helpdesk, and deflection at a stated safety budget is the
   number that maps to their product.

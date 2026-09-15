@@ -51,7 +51,8 @@ def test_bypass_cache_reaches_the_model_and_leaves_the_cache_alone(tmp_path: Pat
     monkeypatch.setattr(llm, "CALL_LOG", tmp_path / "llm_calls.jsonl")
     calls = []
 
-    def fake_chat(model: str, messages: list[dict], schema: dict | None, options: dict) -> llm.LLMResponse:
+    def fake_chat(model: str, messages: list[dict], schema: dict | None, options: dict,
+                  logprobs: bool = False) -> llm.LLMResponse:
         calls.append(model)
         return llm.LLMResponse(text=f"reply {len(calls)}", parsed=None, model=model, prompt_tokens=1,
                                completion_tokens=1, latency_s=0.0, cache_hit=False)

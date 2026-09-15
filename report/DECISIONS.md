@@ -188,8 +188,9 @@ calls per model, with placeholder draft and judge prompts.
   needed migrating.
   - Rejected: reading compromised accounts out of the free-text reason.
 
-- **`src/llm.py` is 154 lines, an exception to the 150-line limit**, because
-  `complete()` gained `bypass_cache`. A temperature-0 self-consistency re-run
+- **`src/llm.py` is 164 lines, an exception to the 150-line limit**, because
+  `complete()` gained `bypass_cache` (154 lines) and then `logprobs` (see
+  Pipeline). A temperature-0 self-consistency re-run
   through the cache returns the stored reply and would report 100% agreement
   by construction. The bypass neither reads nor writes the cache, so a re-run
   cannot replace the reply that later stages read. Keeping it in the one
@@ -247,3 +248,106 @@ calls per model, with placeholder draft and judge prompts.
 
 - **Case 664584 was corrected**: compromised y to n, and a leftover test note
   cleared.
+
+## Pipeline (decided 2026-09-15, before any system is scored)
+
+- **Stages run as batches, one model at a time**: phi3 classifies every case
+  and then gives every layer-4 judgement, retrieval runs on the CPU, and
+  llama3 drafts every reply last, so a run switches model once. `run(case)`
+  exists for a single case, where the models necessarily alternate.
+  - Rejected: taking each case through every stage in turn, which swaps
+    models on every case.
+
+- **Intent confidence is the probability phi3 gave the intent it wrote**:
+  exp of the summed logprobs of the output tokens that spell it, from
+  Ollama's token logprobs (`complete(logprobs=True)`). In a probe on Ollama
+  0.34.0, a token the JSON schema forbids ranked first in `top_logprobs`, so
+  these are the model's probabilities before the schema narrows the choice.
+  `logprobs` joins the cache key only when requested, so every existing key,
+  the sampler's estimates included, still matches.
+  - The classify call keeps the sampler's exact prompt and settings, so on
+    the 147 model-labelled cases the prediction is the label (Golden set
+    labels, above).
+  - Rejected: asking phi3 to state its confidence, and sampling several
+    answers at temperature > 0, which breaks determinism and multiplies calls.
+
+- **The precedent index leaves out every case that shares a thread_id or a
+  dup_group_id with a golden case (486 of 39,582), and every case embedded
+  within cosine 0.98 of one (10 more)**, leaving 39,086 precedents. B1 copies
+  from the same list. The golden pool and label files must list the same 150
+  cases or the build stops. `tests/test_index.py` asserts, for all 150 golden
+  cases, that no retrieved precedent shares either id and that no similarity
+  reaches 0.98, with its own 0.98 constant. It needs the gitignored data, so
+  CI skips it.
+  - The similarity rule was added after that test failed on its first run.
+    Golden case 507403, a two-word thanks followed by two emoji, had five
+    precedents at cosine 1.0000: other customers' same thanks with different
+    emoji. MinHash put them at Jaccard 0.47 to 0.70, under 0.85, because in so
+    short a string the emoji are much of the text, while MiniLM embeds them
+    identically. No other golden case reached 0.95 against any precedent; the
+    next highest was 0.94.
+  - Rejected: filtering at query time only, which a caller could bypass.
+  - Rejected: raising the test's threshold to let the case through.
+
+- **Precedent intents come from a logistic regression on the MiniLM
+  embeddings**, trained on phi3's cached estimates for the sampler's
+  1,500-case pool minus any case sharing a golden thread or group: 1,370
+  training cases. Retrieval filters on intent, and precedents have no labels.
+  - Rejected: classifying all 39,096 precedents with phi3, about 48 h at the
+    measured 4.4 s median.
+  - Rejected: indexing only the 1,370 cases with an estimate.
+
+- **The similarity floor (0.50) and the confidence threshold (0.50) are
+  defaults, not tuned**, set before any golden retrieval or confidence was
+  looked at. The operating curve (REPORT.md 3.2) sweeps both upward.
+  Precedents below the floor are dropped one by one; when none is left the
+  draft gets none and layer 3 escalates.
+
+- **The no-RAG ablation retrieves nothing**, as REPORT.md Section 3 fixes: no
+  precedents in the draft prompt and no similarity gate in layer 3.
+
+- **The escalation ladder**: the first layer to fire decides.
+  - L1: regex on the customer's own words (earlier customer turns and the
+    message, never brand turns) for fraud, chargebacks, legal threats,
+    account compromise, unauthorised charges, data deletion, self-harm, press
+    and abuse. It needs no model output and nothing overrides it. Plain
+    profanity is not abuse. The account-compromise rule is the regex that set
+    the golden labels' `compromised` field, so on the model-labelled cases it
+    agrees with them by construction.
+  - L2: billing_subscription and other_unclear never auto-handle, and
+    followup_diagnostic with no earlier turns escalates. That last rule is
+    the guideline's split rule for the intent, added although the brief named
+    only the first two; it is also the model-label rule, so it agrees with
+    those labels by construction.
+  - L3: intent confidence below the threshold, the best precedent below the
+    floor, or a draft that failed its checks twice. The draft gate was added
+    because an unusable draft must not be auto-sent.
+  - L4: phi3 picks one of none, needs_account_data, needs_staff_action and
+    unclear_request. reason_text is fixed per code, never the model's free
+    text. phi3 is asked wherever L1 and L2 did not fire, including cases L3
+    later escalates, so the threshold grid can be re-scored from the traces
+    without a new model call.
+
+- **Every case gets a draft, escalated or not**, because reply quality is
+  judged on all 150; for an escalated case it is a suggestion for the human.
+
+- **Draft checks**: a draft is rejected when it copies 8 words in a row from
+  the prompt (the rules, the customer's words, the precedents' customer
+  messages; a precedent's reply wording may be reused), contains a section
+  marker, or names a refund, amount or timeline that no precedent reply
+  contains. It is retried once with the reasons appended; a second failure
+  keeps the text and escalates at layer 3. A draft over 280 characters, or
+  cut off at num_predict 80, is trimmed to its last full sentence.
+
+- **The precedent a draft used is named by word overlap**: the precedent
+  whose reply shares the most words of 4+ letters with the draft, at least
+  3, else none.
+  - Rejected: asking llama3 to cite it. The brief wants the reply text only,
+    and a JSON wrapper inside num_predict 80 risks truncated JSON.
+
+- **B0 and B1 train on the same cached phi3 estimates and copy only from the
+  index's leak-safe cases.** B0's intent is the majority estimate and its
+  constant reply is a sentence I wrote. B1 is TF-IDF (unigrams and bigrams,
+  min_df 2, sublinear tf) with logistic regression, a copy of the nearest
+  case's reply by TF-IDF cosine with the leading @USER removed, and
+  escalation on a fixed keyword list.

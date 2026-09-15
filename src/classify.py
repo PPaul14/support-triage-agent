@@ -1,9 +1,11 @@
-"""Stage 4 (classify), part 1: render the compact classifier prompt block from docs/taxonomy.md.
+"""Stage 4 (classify): render the compact classifier prompt block from docs/taxonomy.md, and ask phi3 for an intent.
 
 The guideline stays the single source of truth. The block is a smaller view of it, rebuilt from
 each intent's Summary line, its first examples and the tie-break order.
 """
 
+import hashlib
+import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -14,14 +16,14 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 TAXONOMY_MD = REPO_ROOT / "docs" / "taxonomy.md"
 PROMPT_TXT = REPO_ROOT / "artifacts" / "classifier_prompt.txt"
 CLASSIFY_MODEL = "phi3:3.8b-mini-128k-instruct-q4_0"
+NUM_PREDICT = 32  # the setting the sampler's estimates were made with; src/golden.py reads them back with it
 TIE_BREAK_SECTION = "Tie-break rules"
 SUMMARY_PREFIX = "**Summary.** "
 EXAMPLES_PER_INTENT = 2
 MAX_EXAMPLE_CHARS = 120
 EXAMPLE_LINE = re.compile(r'^- \[case \d+\] "(.*?)"(?=$| →| \()')  # the quote ends where a note or label starts
 ORDER_LINE = re.compile(r"^\d+\. (\w+)$")
-# The intent question asked after the block. golden.py's estimates use it, and src/model_label.py turns those
-# cached estimates into the model labels.
+# The intent question after the block: the sampler's estimates, the model labels and predict() all share it.
 ESTIMATE_INSTRUCTION = ("\nEstimate which intent from the list above fits the customer message below. "
                         'Reply with JSON only, in the form {"intent": "<intent name>"}.\n\n')
 
@@ -96,6 +98,40 @@ def intent_prompt(case: dict, block: str) -> str:
 def intent_schema(intents: list[str]) -> dict:
     """JSON schema for exactly one intent name from the taxonomy."""
     return {"type": "object", "properties": {"intent": {"type": "string", "enum": intents}}, "required": ["intent"]}
+
+
+@dataclass
+class Prediction:
+    intent: str
+    confidence: float  # the probability phi3 gave the intent it wrote, from its token logprobs
+    prompt_sha256: str
+    response: llm.LLMResponse
+
+
+def value_probability(token_logprobs: list[dict], value: str) -> float:
+    """exp of the summed logprobs of the output tokens that overlap the last quoted occurrence of value."""
+    text = "".join(item["token"] for item in token_logprobs)
+    start = text.rfind(f'"{value}"') + 1
+    if start == 0:
+        raise ValueError(f"{value!r} is not in the output {text!r}")
+    end = start + len(value)
+    position = 0
+    total = 0.0
+    for item in token_logprobs:
+        if position < end and position + len(item["token"]) > start:
+            total += item["logprob"]
+        position += len(item["token"])
+    return math.exp(total)
+
+
+def predict(case: dict, block: str, intents: list[str]) -> Prediction:
+    """phi3's intent from the sampler's exact prompt and settings, plus the probability it gave that intent."""
+    prompt = intent_prompt(case, block)
+    response = llm.complete(prompt, CLASSIFY_MODEL, schema=intent_schema(intents), num_predict=NUM_PREDICT,
+                            logprobs=True)
+    intent = response.parsed["intent"]
+    prompt_sha256 = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+    return Prediction(intent, value_probability(response.token_logprobs, intent), prompt_sha256, response)
 
 
 def main() -> None:

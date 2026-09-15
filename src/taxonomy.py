@@ -57,8 +57,8 @@ def embed(texts: list[str]) -> np.ndarray:
     cache_path = EMBEDDINGS_DIR / f"all-MiniLM-L6-v2-{MODEL_REVISION[:12]}.npz"
     cached: dict[str, np.ndarray] = {}
     if cache_path.exists():
-        stored = np.load(cache_path)
-        cached = dict(zip(stored["keys"].tolist(), stored["vectors"]))
+        with np.load(cache_path) as stored:  # closed at once: Windows cannot replace a file that is still open
+            cached = dict(zip(stored["keys"].tolist(), stored["vectors"]))
     keys = [hashlib.sha256(text.encode("utf-8")).hexdigest() for text in texts]
     missing = {key: text for key, text in zip(keys, texts) if key not in cached}
     if missing:

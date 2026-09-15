@@ -28,6 +28,7 @@ class LLMResponse:
     completion_tokens: int
     latency_s: float
     cache_hit: bool
+    token_logprobs: list[dict] | None = None  # Ollama's {"token", "logprob", ...} per output token, if asked for
 
 
 class LLMParseError(Exception):
@@ -36,13 +37,14 @@ class LLMParseError(Exception):
 
 def complete(prompt: str, model: str, *, system: str | None = None, schema: dict | None = None,
              temperature: float = 0.0, num_ctx: int = 4096, num_predict: int = 512,
-             bypass_cache: bool = False) -> LLMResponse:
+             bypass_cache: bool = False, logprobs: bool = False) -> LLMResponse:
     """Run one LLM call, served from the disk cache when possible. Put the static prompt block FIRST
     and the per-case content LAST, so Ollama can reuse the already-processed prefix between calls.
     bypass_cache=True neither reads nor writes the cache: a temperature-0 re-run (a self-consistency
-    check) must reach the model, and must not overwrite the reply that later stages read."""
+    check) must reach the model, and must not overwrite the reply that later stages read.
+    logprobs=True also returns the log probability of every output token."""
     options = {"temperature": float(temperature), "num_ctx": num_ctx, "num_predict": num_predict, "seed": SEED}
-    key = _cache_key(model, prompt, system, schema, options)
+    key = _cache_key(model, prompt, system, schema, options, logprobs)
     cache_path = CACHE_DIR / f"{key}.json"
 
     if cache_path.exists() and not bypass_cache:  # cache hit: return before any network code runs
@@ -58,18 +60,19 @@ def complete(prompt: str, model: str, *, system: str | None = None, schema: dict
     if system is not None:
         messages.insert(0, {"role": "system", "content": system})
 
-    response = _chat(model, messages, schema, options)
+    response = _chat(model, messages, schema, options, logprobs)
     _log_call(key, response, repair=False)
     if schema is not None:
         try:
             response.parsed = _parse(response.text, schema)
         except ValueError as error:
-            response = _repair(key, model, messages, schema, options, response, str(error))
+            response = _repair(key, model, messages, schema, options, response, str(error), logprobs)
 
     if bypass_cache:
         return response
     # Only validated replies get here. Temp file + rename: a killed run never leaves half a file.
-    request = {"model": model, "system": system, "prompt": prompt, "schema": schema, "options": options}
+    request = {"model": model, "system": system, "prompt": prompt, "schema": schema, "options": options,
+               "logprobs": logprobs}
     entry = {"request": request, "response": asdict(response)}
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     temp_path = cache_path.with_suffix(".tmp")
@@ -79,11 +82,11 @@ def complete(prompt: str, model: str, *, system: str | None = None, schema: dict
 
 
 def _repair(key: str, model: str, messages: list[dict], schema: dict, options: dict,
-            first: LLMResponse, reason: str) -> LLMResponse:
+            first: LLMResponse, reason: str, logprobs: bool) -> LLMResponse:
     """Send the invalid reply back once with the reason; raise if still invalid."""
     repair_messages = messages + [{"role": "assistant", "content": first.text},
                                   {"role": "user", "content": REPAIR_PROMPT.format(reason=reason)}]
-    second = _chat(model, repair_messages, schema, options)
+    second = _chat(model, repair_messages, schema, options, logprobs)
     _log_call(key, second, repair=True)
     try:
         second.parsed = _parse(second.text, schema)
@@ -97,9 +100,11 @@ def _repair(key: str, model: str, messages: list[dict], schema: dict, options: d
     return second
 
 
-def _chat(model: str, messages: list[dict], schema: dict | None, options: dict) -> LLMResponse:
+def _chat(model: str, messages: list[dict], schema: dict | None, options: dict,
+          logprobs: bool = False) -> LLMResponse:
     """POST one chat request to Ollama, retrying only on connection errors."""
-    payload = {"model": model, "messages": messages, "options": options, "stream": False}
+    payload = {"model": model, "messages": messages, "options": options, "stream": False,
+               "logprobs": logprobs}
     if schema is not None:
         payload["format"] = schema
     last_error = None
@@ -119,7 +124,7 @@ def _chat(model: str, messages: list[dict], schema: dict | None, options: dict) 
         return LLMResponse(text=body["message"]["content"], parsed=None, model=model,
                            prompt_tokens=body.get("prompt_eval_count", 0),
                            completion_tokens=body.get("eval_count", 0),
-                           latency_s=latency_s, cache_hit=False)
+                           latency_s=latency_s, cache_hit=False, token_logprobs=body.get("logprobs"))
     raise ConnectionError(f"Could not reach Ollama at {OLLAMA_URL} after {MAX_ATTEMPTS} attempts") from last_error
 
 
@@ -136,9 +141,14 @@ def _parse(text: str, schema: dict) -> dict:
     return parsed
 
 
-def _cache_key(model: str, prompt: str, system: str | None, schema: dict | None, options: dict) -> str:
-    """sha256 over everything that changes the output. json.dumps, not "|".join: no collisions."""
-    text = json.dumps([model, prompt, system, schema, options], sort_keys=True, ensure_ascii=False)
+def _cache_key(model: str, prompt: str, system: str | None, schema: dict | None, options: dict,
+               logprobs: bool = False) -> str:
+    """sha256 over everything that changes the output. json.dumps, not "|".join: no collisions.
+    logprobs joins the key only when asked for, so every key written before it existed still matches."""
+    parts = [model, prompt, system, schema, options]
+    if logprobs:
+        parts.append("logprobs")
+    text = json.dumps(parts, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
