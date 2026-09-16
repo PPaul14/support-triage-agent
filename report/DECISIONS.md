@@ -102,6 +102,12 @@ calls per model, with placeholder draft and judge prompts.
     not been timed.
   - Rejected: 120 for drafts and 200 for judges.
 
+  - **Revised on 2026-09-16: the judge cap is 200**, the value rejected above.
+    Making the quote mandatory for every failing answer (Pipeline, below) made
+    the replies longer: 1 of 8 smoke judgements ran past 150 tokens and was
+    unusable even after its repair, and the usable ones reached 142. Drafts
+    stay at 80.
+
 - **Target: about 5.5 h for the full run, down from the 20.3 h baseline. Not
   yet measured.** Applying the measured per-call medians to the new call
   counts gives about 6.7 to 7.7 h, before the shorter judge outputs are

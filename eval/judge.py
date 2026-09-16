@@ -17,12 +17,12 @@ from src import llm
 from src.runs import golden_cases, progress, write_trace
 
 JUDGE_MODEL = "qwen2.5:7b-instruct-q4_K_M"
-NUM_PREDICT = 150
+NUM_PREDICT = 200  # raised from 150: with the quote mandatory, judgements reached 142 tokens
 CHECKS = {  # name: (question, the answer that fails the reply), worded as in REPORT.md 3.3
     "contains_unsupported_specific": ("Does the reply state a number, date, duration or policy that is absent "
                                       "from the evidence?", "yes"),
-    "advances_resolution": ("Does the reply give a concrete step, rather than only moving the conversation "
-                            "to DM?", "no"),
+    "advances_resolution": ("Does the reply give the customer a concrete step or answer to act on? A reply "
+                            "that only moves the conversation to DM does not.", "no"),
     "addresses_stated_problem": ("Does the reply respond to the problem the customer actually raised?", "no"),
     "tone_appropriate": ("Is the reply polite and in the brand's voice?", "no"),
     "would_send_unedited": ("Could the reply be sent as written, with no edits?", "no"),
@@ -49,9 +49,10 @@ def rubric() -> str:
              "and the REPLY below, and answer every check with yes or no.", ""]
     for name, (question, _) in CHECKS.items():
         lines.append(f"{name}: {question}")
-    lines += ["", "Fill \"evidence\" only for an answer that fails the reply (yes on contains_unsupported_specific, "
-              "no on every other check): quote under 12 words from the reply or the evidence that decide it. "
-              "Otherwise leave it empty. Reply with JSON only.", "", ""]
+    lines += ["", "An answer fails the reply when it is yes on contains_unsupported_specific, or no on any "
+              "other check. Every failing answer MUST carry, in its own \"evidence\" field, a quote of under 12 "
+              "words from the reply or the evidence that decides it. Leave \"evidence\" empty only where the "
+              "answer does not fail. Reply with JSON only.", "", ""]
     return "\n".join(lines)
 
 
