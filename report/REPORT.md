@@ -1,12 +1,40 @@
 # Report: an evaluated local triage agent for SpotifyCares
 
-Status: skeleton, 2026-09-13. Every number below was measured in this
+Status: 2026-09-16. Sections 1, 2 and 5 are written, and Section 4 holds the
+first three failure modes. Sections 3 and 6 are still TBD: the evaluation run
+that fills Section 3 is still going. Every number below was measured in this
 repository and names its source. "TBD" marks every number that does not exist
 yet. Nothing here is estimated or projected.
 
 ## 1. Problem framing
 
-What "good" means for SpotifyCares: TBD.
+### What "good" means for SpotifyCares
+
+SpotifyCares answers customers in public, on Twitter. Four things follow from
+that channel, and together they decide what a triage agent is worth here.
+
+- **A reply is published, not sent.** Everyone reading the thread sees it, and
+  it stays there. A wrong public answer costs more than a slow one, which is
+  why the headline in Section 3 is the auto-handle rate at a fixed
+  harmful-auto-reply budget rather than an accuracy: the budget is the
+  constraint, and deflection is the number that moves inside it.
+- **Most of what the customer needs, the agent cannot see.** Charges, refunds,
+  plan state and identity live behind account data a message-only agent has no
+  access to. For those cases "good" is a fast, correct hand-off, not an answer.
+- **A good reply either moves the case forward or moves it to the right
+  place**: a concrete step the customer can take now, or a hand-off with the
+  reason stated. A polite acknowledgement that does neither looks like service
+  and resolves nothing. That is why `advances_resolution` is one of the five
+  reply checks (Section 3.3), and why similarity to the brand's own reply is a
+  diagnostic here and never a headline (finding 1.1).
+- **What the agent actually buys is a person's attention.** Every case it
+  handles safely is one nobody opens. That is the number a shared-inbox product
+  is bought on, and it means nothing except next to the harm rate it was
+  bought at.
+
+What this project does not claim to know: SpotifyCares' own service targets,
+staffing or response times. None of that is in the dataset, so "good" here is
+defined from the channel and the data, not from their internal goals.
 
 ### Measured constraints
 
@@ -27,8 +55,11 @@ billing_subscription hold 713 messages (17.8%). That intent always escalates:
 resolving it needs account and payment data the agent has no access to. The
 clusters merged into followup_diagnostic hold 478 (12.0%): replies whose
 meaning lives in the earlier turns, which a message-only agent cannot act on.
-Together that is 1,191 of 4,000 (29.8%). The ceiling on the auto-handle rate
-is set by the traffic and the escalation policy before any modelling.
+Together that is 1,191 of 4,000 (29.8%): roughly 29% of this traffic is beyond
+any message-only agent before a single model runs. The ceiling on the
+auto-handle rate is set by the traffic and the escalation policy, not by the
+modelling, and an auto-handle rate far above 70% on this mix would mean the
+agent is answering cases the policy says it must not.
 These are cluster shares, not labels: clusters are impure, the sample holds
 one message per near-duplicate group, and the guideline moves cluster 1's
 resolution confirmations to chatter_thanks. The labelled shares are TBD
@@ -39,16 +70,82 @@ resolution confirmations to chatter_thanks. The labelled shares are TBD
 
 ### What I chose not to build
 
-- No multi-turn dialogue policy.
-- No fine-tuning.
-- No tool execution.
-- No live service.
-- No sentiment feature for escalation, deliberately: anger and risk are
-  different variables.
+- **No multi-turn dialogue policy.** The unit here is one inbound message with
+  the turns before it. Evaluating a policy across several of the agent's own
+  turns needs live traffic or a simulated customer, and the dataset has
+  neither: it holds the brand's real reply, never the agent's.
+- **No fine-tuning.** The evaluation is the point of the project, and the
+  obvious training target would undermine it: 31.6% of the brand's visible
+  replies move the customer to DM (finding 1.1), so a model trained to imitate
+  them would learn to deflect, and would score well on reference similarity for
+  doing so. The machine is also CPU-only with 16 GB of RAM.
+- **No tool execution.** The agent looks nothing up and changes nothing. That
+  is the premise the escalation ladder exists to enforce: when a case needs
+  account data, the correct output is a hand-off, not an attempt.
+- **No live service.** A queue, rate limits and monitoring would add
+  operational surface without changing a single measured number.
+- **No sentiment feature for escalation, deliberately.** Anger and risk are
+  different variables. An angry customer whose songs will not play is still
+  auto-handleable; a calm customer whose account has been taken over is not.
+  Escalating on tone would spend human time on volume rather than on need, and
+  would bury the cases that matter under the ones that shout.
 
 ## 2. System
 
-Architecture: TBD. The evaluation harness is not built yet.
+### The pipeline, as built
+
+Nine stages, one module each. Every LLM call goes through `src/llm.py`, the
+only module that talks to Ollama: a disk cache keyed on model, prompt and
+parameters, one JSON repair retry, and a token and latency log.
+
+| # | stage | module | model | output |
+|---|---|---|---|---|
+| 1 | ingest | `src/ingest.py` | none | threads rebuilt from `twcs.csv`: one case per inbound message, with its earlier turns and the brand's reply |
+| 2 | clean | `src/clean.py` | none | normalised text, URLs and handles as placeholders, a language tag, near-duplicate groups (MinHash, Jaccard 0.85) |
+| 3 | taxonomy | `src/taxonomy.py` | MiniLM | 25 KMeans clusters over 4,000 messages, merged by hand into the 9 intents of `docs/taxonomy.md` |
+| 4 | classify | `src/classify.py` | phi3 3.8B | one intent, and the probability phi3 gave it, read from Ollama's token logprobs |
+| 5 | index | `src/index.py` | MiniLM | 39,086 precedents, each with an embedding and an estimated intent; the leak exclusions are applied here |
+| 6 | retrieve | `src/retrieve.py` | none | up to 5 precedents of the predicted intent above a 0.50 cosine floor, or none at all |
+| 7 | draft | `src/generate.py` | llama3 8B | a reply under 280 characters, checked and retried once if it fails |
+| 8 | escalate | `src/escalate.py` | phi3 3.8B (layer 4 only) | auto-handle or escalate, with a reason code and the layer that decided |
+| 9 | run | `src/pipeline.py` | — | one trace per case: every intermediate value, prompt hash, token count and latency |
+
+Stages run as whole batches, one model at a time: phi3 classifies all 150 cases
+and gives every layer-4 judgement, then llama3 drafts all 150. Ollama holds one
+model in RAM at a time on this machine, so going case by case would reload a
+model twice per case.
+
+**Retrieval is leak-safe by construction.** The index leaves out every case
+sharing a `thread_id` or a `dup_group_id` with a golden case, and every case
+embedded within 0.98 cosine of one: 486 plus 10 of 39,582 removed.
+`tests/test_index.py` asserts, for all 150 golden cases, that no retrieved
+precedent shares either id and that no similarity reaches 0.98. It failed on
+its first run (Section 4, mode 3).
+
+### The escalation ladder
+
+Four layers, read in order. The first that fires decides, and no later layer
+can overturn an earlier one.
+
+| layer | what it is | fires on |
+|---|---|---|
+| L1 | regex over the customer's own words, consulted before any model output | fraud, chargebacks, legal threats, account compromise, unauthorised charges, data deletion, self-harm, press, abuse |
+| L2 | the intent policy from `docs/taxonomy.md` | `billing_subscription` and `other_unclear` never auto-handle; `followup_diagnostic` with no earlier turns escalates |
+| L3 | gates on the pipeline's own numbers | intent confidence below 0.50, best precedent below the 0.50 floor, or a draft that failed its checks twice |
+| L4 | phi3, constrained to a fixed reason-code enum | `needs_account_data`, `needs_staff_action`, `unclear_request`; `none` means auto-handle |
+
+L1 and L2 are deterministic, which is what makes the pre-registered
+zero-SEVERE budget achievable by construction rather than by hope. L4 is asked
+wherever L1 and L2 did not fire, including on cases L3 escalates, so the
+threshold grid in Section 3.2 can be re-scored from the traces without another
+model call.
+
+**L1 and L2 share their rules with the labels they are scored against.** L1's
+account-compromise regex is the rule that set the `compromised` field on the
+147 model labels, and L2's `followup_diagnostic` rule is the one that set their
+`escalate` field. On those cases the agreement is construction, not evidence.
+Section 5 states what that costs; the blind audit covers intent only, so it
+does not repair it.
 
 **2.1 KMeans found axes other than topic.** Of the 25 clusters over 4,000
 customer messages, clusters 1, 18 and 24 are conversational positions rather
@@ -323,15 +420,99 @@ B0's constant reply is judged once per intent and the verdict reused
 
 ## 4. Failure analysis: top 5 failure modes
 
-TBD. This needs the labelled golden set and the systems' outputs.
+Three modes are written up below. Two more are being drafted from the 150
+no-RAG traces and are TBD. Rates over the full 150 are TBD for every mode until
+the evaluation run finishes; the counts given are the cases examined so far and
+say so.
 
 | # | failure mode | cases | example | cause |
 |---|---|---|---|---|
-| 1 | TBD | TBD | TBD | TBD |
-| 2 | TBD | TBD | TBD | TBD |
-| 3 | TBD | TBD | TBD | TBD |
+| 1 | Invented product instructions | 2 cases, both from the 5-case smoke run; rate over 150 TBD | disabling the "Offline Mode" feature | the draft's own guard checks numbers, money and timelines, not invented settings |
+| 2 | Invented prior context (fixed) | 1 case, before and after | "as mentioned in our previous conversation", on a case with no earlier turns | the precedents were headed "PAST REPLIES" and read as this conversation |
+| 3 | Retrieval leakage at cosine 1.0000 (fixed) | 1 golden case, 5 precedents; 10 excluded | a two-word thanks matched to the same thanks from five other customers | MinHash and MiniLM have different blind spots on emoji |
 | 4 | TBD | TBD | TBD | TBD |
 | 5 | TBD | TBD | TBD | TBD |
+
+### 4.1 Invented product instructions, auto-sent
+
+The draft model invents settings that do not exist and states them as fact.
+Both examples were auto-handled: no layer of the ladder fired, and layer 4
+answered `none`.
+
+- Case 2363279, whose customer asked how to stop Spotify updating on a Galaxy
+  S7 Edge: *"Hey there! Sorry to hear that you're experiencing issues with
+  Spotify updates on your Galaxy S7 Edge. To prevent updates from deleting your
+  locally downloaded music, you can try disabling the "Offline Mode" feature."*
+  Disabling Offline Mode does not prevent updates from deleting downloads.
+- Case 790770, whose customer asked for a confirmation step before deleting
+  downloads: *"Hey! We understand your concern. We'll pass this feedback along
+  to our team. In the meantime, you can try enabling the "Confirm before
+  deleting" option in your account settings. This might help prevent accidental
+  song removal."* There is no such option; the customer had just written in to
+  ask for one.
+
+**Cause.** `src/generate.py` rejects a draft that states a number, an amount of
+money, a date or a timeline absent from the precedents, and retries it once. An
+invented setting name contains none of those, so it passes every check. The
+precedents ground tone and format; they do not ground product truth, and
+nothing in this project holds a list of Spotify's real settings to check
+against.
+
+**What would catch it.** Only the judge's `contains_unsupported_specific` check
+(Section 3.3), which is why that check's own validation against hand scores
+matters. How often it catches this across the full run is TBD.
+
+### 4.2 Invented prior context, since fixed
+
+Case 2363279 has no earlier turns at all. The first version of the draft
+prompt produced: *"Hey there! Unfortunately, we don't have a specific setting to
+prevent Spotify updates on your Galaxy S7 Edge. However, you can consider
+blocking Spotify notifications at the system level, as mentioned in our
+previous conversation."*
+
+There was no previous conversation. The model had read a retrieved precedent,
+another customer writing "for now I'll just block all Spotify notification at
+the system level", as something this customer had been told.
+
+**Cause.** The precedent block was headed `=== PAST REPLIES ===` and listed
+each precedent's customer message as well as the brand's reply, with nothing
+saying whose conversation it was.
+
+**Fix**, in `src/generate.py`: the section is now headed `=== OTHER CUSTOMERS'
+PAST CASES (not this conversation) ===`, each line reads "Another customer
+wrote" or "The brand replied", the case's own turns sit under `=== THIS
+CONVERSATION: EARLIER TURNS ===`, and a rule in the system message forbids
+referring to those cases as anything this customer said or was told. After the
+change, the same case drafted a reply with no reference to a prior
+conversation. The five smoke replies contained no other invented context.
+
+**It replaced one invention with another.** The fixed reply is the "Offline
+Mode" quote in 4.1. Grounding the model in whose conversation it is reading did
+not stop it inventing the product.
+
+### 4.3 Retrieval leakage at cosine 1.0000, caught by the test that exists for it
+
+Golden case 507403 is a two-word thanks followed by two emoji. Its five nearest
+precedents were the same two-word thanks from five other customers, with
+different emoji, at cosine 1.0000 to four decimal places.
+
+**Cause.** Two near-duplicate detectors with different blind spots. MinHash
+over character 5-grams scored those pairs at Jaccard 0.47 to 0.70, below the
+0.85 threshold, because in a string that short the emoji are much of the text.
+MiniLM does not distinguish the emoji at all and embeds the messages
+identically. A near-duplicate that one detector cannot see is invisible to the
+pipeline that relies on it.
+
+**Why it matters.** Those precedents carry the brand's real reply to what is,
+in substance, the same message. Answering from them would produce a reply that
+looks excellent and inflates every quality metric, while measuring nothing
+except that the corpus repeats itself.
+
+**Caught by** `tests/test_index.py`, on its first run, through the assertion
+that no golden case may retrieve a precedent at 0.98 or above. **Fixed** by
+adding embedding similarity as a third index exclusion, alongside `thread_id`
+and `dup_group_id`: 10 precedents removed, leaving 39,086. No other golden case
+came within 0.95 of a precedent; the next highest was 0.94.
 
 ## 5. What is misleading about my headline number
 
@@ -345,22 +526,45 @@ golden cases labelled escalate whose intent is billing_subscription or whose
 `compromised` field is true (value TBD). Any zero reported here is stated in
 the same sentence as N and that bound.
 
-**The evaluation set is MODEL-LABELLED, not hand-labelled.** 147 of the 150
-golden cases carry phi3's intent plus rule-derived escalate and compromised
-fields; 3 were labelled by me, one of them with a phi3 suggestion shown. 40
-of the 147 were independently labelled by me, blind, and agreement with the
-model labels is TBD (Wilson 95% interval TBD) until that audit is done. The
-classifier and the labels come from the same model family and the same
-taxonomy, so any agreement between them is partly shared error rather than
-accuracy, and macro-F1 against these labels measures consistency with phi3
-rather than correctness. For the phi3 systems it is stronger than that: a
-model label is phi3's answer to the classifier's own prompt, so on those
-cases the classifier's prediction is the label itself. Intent metrics are
-therefore scored only on the 43 human-labelled cases (Section 3.1). The
-escalate labels on the 147 come from rules, so a system whose escalation uses
-the same rules agrees with them by construction; the audit checks the intent
-only. `data/golden/labeling_notes.md` holds the audit figures, written by
-`python -m eval.label_stats`.
+**The evaluation set is MODEL-LABELLED, and a third of the labels I checked
+were wrong.** 147 of the 150 golden cases carry phi3's intent plus rule-derived
+escalate and compromised fields; 3 I labelled myself. I then labelled 40 of the
+147 independently and blind, seeing only the customer's message and its earlier
+turns.
+
+- **Agreement with the model labels: 25 of 40, 62.5%, Wilson 95% interval
+  47.0% to 75.8%** (`data/golden/labeling_notes.md`, written by
+  `python -m eval.label_stats`).
+- So roughly one label in three is not what a careful reader would choose.
+  Scoring macro-F1 against all 150 would measure agreement with phi3 rather
+  than correctness, and for the phi3 systems it is worse: a model label is
+  phi3's answer to the classifier's own prompt, so on those cases the
+  prediction is the label itself. **Intent is therefore scored only on the 43
+  human-labelled cases** (Section 3.1), with the loss of power n = 43 brings.
+- **The disagreement is not spread evenly.** `other_unclear` agreed on 2 of 6
+  (33.3%): phi3 reaches for it where I did not. `feature_request` agreed on 6
+  of 7 (85.7%). Intents with fewer than 5 audited cases are not reported.
+- The escalate labels on the 147 come from rules, and L1 and L2 of the ladder
+  use those same rules (Section 2), so that agreement is construction. The
+  audit covered intent only and does not repair it.
+
+**The first audit pass was invalid, and the number it produced looked
+plausible.** Its 40 answers stepped 1, 2, ... 9 straight through the keypad and
+repeated, all 40 entered in 97 seconds. It reported 15.0% agreement, which
+reads like a finding about a weak classifier rather than like an empty file:
+near the 11% that guessing over 9 intents gives, which is what raised the
+suspicion. A shift test settled it, joining each answer to the queue case
+`shift` places away: shift 0 scored 15% and the four neighbours 8% to 11%, so
+the join was sound and the answers themselves were the problem. A real
+off-by-one would have shown a high-agreement neighbour.
+
+`python -m src.label audit` now refuses to write once 9 answers in a row step
+through the keypad, holds a file already on disk to a stricter run of 5, warns
+whenever an answer arrives in under 2 seconds, and records how long each answer
+took. The valid pass took 20.8 minutes, a median of 18.2 seconds per case.
+**Annotation tooling needs adversarial checks against its own operator**: the
+person best placed to corrupt a label set quietly is the one holding the
+keyboard, and the corrupted number arrives looking like a result.
 
 ## 6. What I'd do next with one more week
 
