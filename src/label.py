@@ -1,5 +1,5 @@
 """Golden set, part 3: the labelling CLI. `python -m src.label` labels pool cases by hand, and
-`python -m src.label audit` walks through the 40-case audit queue blind. Every answer is saved at once."""
+`python -m src.label audit` runs the blind audit from src/audit.py. Every answer is saved at once."""
 
 import argparse
 import json
@@ -40,13 +40,6 @@ class Label:
     mode: str = "manual"  # "manual" (labelled by me here) or "model" (phi3 plus rules, src/model_label.py)
 
 
-@dataclass
-class AuditLabel:
-    case_id: int
-    audit_intent: str  # my blind label, compared with the model label by eval/label_stats.py
-    audited_at: str  # ISO 8601, UTC
-
-
 def ask(prompt: str, allowed: list[str] | None = None) -> str:
     """Read one answer, repeating until it is in `allowed` when given. 'q' quits; everything so far is saved."""
     while True:
@@ -80,28 +73,6 @@ def read_jsonl(path: Path) -> list[dict]:
 def load_cases(case_ids: set[int]) -> dict[int, dict]:
     """The cases_clean records for these case ids."""
     return {case["case_id"]: case for case in read_jsonl(CLEAN_JSONL) if case["case_id"] in case_ids}
-
-
-def audit(intents: list[str]) -> None:
-    """Label the audit queue blind: the model's label, the stratum, the language tag and the brand reply stay hidden."""
-    queue = [record["case_id"] for record in read_jsonl(AUDIT_QUEUE_JSONL)]
-    cases = load_cases(set(queue))
-    previous = read_jsonl(AUDIT_JSONL)
-    done = set(record["case_id"] for record in previous)
-    counts = Counter(record["audit_intent"] for record in previous)
-    print(f"{len(done)}/{len(queue)} audited. Blind: the model's label is never shown. Type q to stop.")
-    for case_id in queue:
-        if case_id in done:
-            continue
-        show(cases[case_id], len(done) + 1, len(queue), intents, counts, INTENT_KEYS)
-        number = ask(f"intent [1-{len(intents)}]: ", [str(n) for n in range(1, len(intents) + 1)])
-        record = AuditLabel(case_id=case_id, audit_intent=intents[int(number) - 1],
-                            audited_at=datetime.now(timezone.utc).isoformat())
-        with AUDIT_JSONL.open("a", encoding="utf-8", newline="\n") as handle:  # saved before the next case
-            handle.write(json.dumps(asdict(record)) + "\n")
-        done.add(case_id)
-        counts[record.audit_intent] += 1
-    print("\nAudit complete. Run python -m eval.label_stats for the agreement figures.")
 
 
 def label_by_hand(intents: list[str]) -> None:
@@ -140,6 +111,7 @@ def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")  # tweets contain emoji; a Windows pipe defaults to cp1252
     intents, _ = classify.parse_taxonomy(classify.TAXONOMY_MD.read_text(encoding="utf-8"))
     if command == "audit":
+        from src.audit import audit  # imported here: src/audit.py uses this module's helpers
         audit(intents)
     else:
         label_by_hand(intents)

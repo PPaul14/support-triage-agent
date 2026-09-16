@@ -255,6 +255,30 @@ calls per model, with placeholder draft and judge prompts.
 - **Case 664584 was corrected**: compromised y to n, and a leftover test note
   cleared.
 
+- **The first audit pass was invalid and was thrown away** (2026-09-16). Its
+  40 answers stepped 1, 2, ... 9 straight through the keypad and repeated, all
+  40 entered in 97 seconds, median gap 1.0 s, 16 of the 39 gaps under a second.
+  That is keypad input from a CLI test, not labelling. Agreement with the model
+  labels came out at 15%, close to the 11% that guessing over 9 intents gives,
+  which is what raised the suspicion.
+  - It was diagnosed with a shift test: each answer was joined to the queue
+    case `shift` places away, for shifts -2 to +2. Shift 0 scored 15% and the
+    four neighbours 8% to 11%, so the join was sound and the answers themselves
+    were the problem; a real off-by-one would have shown a high-agreement
+    neighbour. The stored model labels also matched phi3's cached estimates on
+    all 40, which rules out the other side of the join.
+  - The answers are kept as `artifacts/audit_labels_invalid.jsonl`, outside
+    `data/golden/`, and the agreement section of `labeling_notes.md` is back to
+    "Not audited yet".
+  - **`python -m src.label audit` now guards against it** (`src/audit.py`): it
+    refuses to write once 9 answers in a row step through the keypad, checked
+    before each answer reaches the file, and it warns whenever an answer
+    arrives in under 2 seconds. A file already on disk is held to a stricter
+    limit of 5, because a refusal at the ninth answer leaves 8 behind and that
+    part-cycle must not be extended quietly. Each answer's seconds are now
+    stored beside it. Annotation tooling that cannot tell
+    labelling from keypresses will hand you a number that reads like a finding.
+
 ## Pipeline (decided 2026-09-15, before any system is scored)
 
 - **Stages run as batches, one model at a time**: phi3 classifies every case
