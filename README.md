@@ -24,6 +24,26 @@ ollama pull qwen2.5:7b-instruct-q4_K_M
 
 All inference runs locally through Ollama. No hosted LLM APIs are used.
 
+## Reproduce (Windows, PowerShell)
+
+Needs `data/raw/twcs.csv` (see License) and a running Ollama server with the
+four models below. The golden set is committed; the phi3 estimates the index
+and B1 train on are read from `artifacts/llm_cache/`, which is not.
+
+```powershell
+python -m src.ingest
+python -m src.clean
+python -m src.index        # the first run downloads MiniLM once, so it needs the network
+.\scripts\smoke.ps1        # the first 5 golden cases through all four systems
+.\scripts\run_all.ps1      # the full run in the background; prints its projected wall clock first
+Get-Content artifacts\run.log -Wait -Tail 20
+python -m eval.run_eval    # the metrics again, from the traces, with no model call
+```
+
+Both scripts set `HF_HUB_OFFLINE=1`, so MiniLM loads from the local Hugging
+Face cache and no run contacts the network. Every LLM call is cached on disk,
+so a stopped run resumes where it stopped when started again.
+
 ## Models
 
 Four independent model families from four different labs are used, so the

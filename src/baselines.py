@@ -16,7 +16,9 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 
-from src import index, pipeline
+from src import index
+from src.pipeline import AgentOutput
+from src.runs import golden_cases, new_run_id, write_trace
 
 B0_REPLY = ("Hi there, sorry for the trouble! Could you tell us a bit more about what's happening, and which "
             "device and app version you're using? We'll take it from there.")
@@ -39,7 +41,7 @@ class BaselineTrace:
     run_id: str
     system: str
     case_id: int
-    output: pipeline.AgentOutput
+    output: AgentOutput
     neighbour_similarity: float | None  # B1 only: TF-IDF cosine to the case whose reply was copied
     latency_s: float
 
@@ -66,12 +68,12 @@ def without_leading_handles(text: str) -> str:
     return " ".join(tokens)
 
 
-def run_b0(fitted: Fitted, case: dict) -> tuple[pipeline.AgentOutput, float | None]:
-    return pipeline.AgentOutput(case["case_id"], "b0", fitted.majority_intent, False, "none",
-                                "B0 never escalates", None, B0_REPLY, None), None
+def run_b0(fitted: Fitted, case: dict) -> tuple[AgentOutput, float | None]:
+    return AgentOutput(case["case_id"], "b0", fitted.majority_intent, False, "none",
+                       "B0 never escalates", None, B0_REPLY, None), None
 
 
-def run_b1(fitted: Fitted, case: dict) -> tuple[pipeline.AgentOutput, float | None]:
+def run_b1(fitted: Fitted, case: dict) -> tuple[AgentOutput, float | None]:
     query = fitted.vectorizer.transform([index.embedding_text(case["customer_text"])])
     intent = str(fitted.classifier.predict(query)[0])
     similarities = (fitted.matrix @ query.T).toarray().ravel()
@@ -82,26 +84,30 @@ def run_b1(fitted: Fitted, case: dict) -> tuple[pipeline.AgentOutput, float | No
         escalate, code, text = False, "none", "no escalation keyword in the message"
     else:
         escalate, code, text = True, "keyword", f"escalation keyword in the message: \"{match.group(0)}\""
-    output = pipeline.AgentOutput(case["case_id"], "b1", intent, escalate, code, text, None,
-                                  without_leading_handles(neighbour["brand_reply"]), neighbour["case_id"])
+    output = AgentOutput(case["case_id"], "b1", intent, escalate, code, text, None,
+                         without_leading_handles(neighbour["brand_reply"]), neighbour["case_id"])
     return output, float(similarities[row])
+
+
+def run_baselines(cases: list[dict]) -> None:
+    """B0, then B1, over the cases under one run id: one trace per case each."""
+    fitted = fit()
+    run_id = new_run_id()
+    for system, run_one in (("b0", run_b0), ("b1", run_b1)):
+        start_all = time.perf_counter()
+        for case in cases:
+            start = time.perf_counter()
+            output, similarity = run_one(fitted, case)
+            write_trace(BaselineTrace(run_id, system, case["case_id"], output, similarity,
+                                      time.perf_counter() - start))
+        print(f"{system}: {len(cases)} cases in {time.perf_counter() - start_all:.2f} s, zero LLM calls", flush=True)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run B0 and B1 on golden cases and append one trace per case.")
     parser.add_argument("--limit", type=int, default=None, help="only the first N golden cases (default: all 150)")
     args = parser.parse_args()
-    cases = pipeline.golden_cases(args.limit)
-    fitted = fit()
-    run_id = pipeline.new_run_id()
-    for system, run_one in (("b0", run_b0), ("b1", run_b1)):
-        start_all = time.perf_counter()
-        for case in cases:
-            start = time.perf_counter()
-            output, similarity = run_one(fitted, case)
-            pipeline.write_trace(BaselineTrace(run_id, system, case["case_id"], output, similarity,
-                                               time.perf_counter() - start))
-        print(f"{system}: {len(cases)} cases in {time.perf_counter() - start_all:.2f} s, zero LLM calls")
+    run_baselines(golden_cases(args.limit))
 
 
 if __name__ == "__main__":

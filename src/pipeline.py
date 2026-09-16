@@ -1,6 +1,6 @@
 """The agent end to end: classify, escalate, retrieve and draft, with one trace record per case.
 
-python -m src.pipeline --limit 5 [--no-rag]
+python -m src.pipeline --limit 5 [--no-rag]   (scripts/smoke.ps1 runs the smoke test offline)
 
 Stages run as batches, one model at a time, never alternating per case: phi3 classifies every case and gives
 every L4 judgement, then llama3 drafts every reply. --no-rag is the ablation in REPORT.md Section 3: it
@@ -8,16 +8,11 @@ retrieves nothing, so its drafts get no precedents and its ladder has no similar
 """
 
 import argparse
-import json
 import time
-from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
-from pathlib import Path
+from dataclasses import dataclass
 
 from src import classify, escalate, generate, index, retrieve
-from src.label import CLEAN_JSONL, POOL_JSONL, read_jsonl
-
-TRACES_JSONL = Path(__file__).resolve().parent.parent / "artifacts" / "traces.jsonl"  # quotes tweets: gitignored
+from src.runs import TRACES_JSONL, golden_cases, new_run_id, progress, write_trace
 
 
 @dataclass
@@ -49,27 +44,6 @@ class Trace:
     latency_s: dict[str, float]  # this case's time per stage; an LLM cache hit's figure is a disk read
 
 
-def new_run_id() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-
-
-def write_trace(record: object) -> None:
-    """Append one dataclass record to TRACES_JSONL as one JSON line."""
-    TRACES_JSONL.parent.mkdir(parents=True, exist_ok=True)
-    with TRACES_JSONL.open("a", encoding="utf-8", newline="\n") as handle:
-        handle.write(json.dumps(asdict(record), ensure_ascii=False) + "\n")
-
-
-def golden_cases(limit: int | None = None) -> list[dict]:
-    """The golden cases in pool order (a seeded shuffle), or only the first `limit` of them."""
-    case_ids = [entry["case_id"] for entry in read_jsonl(POOL_JSONL)]
-    if limit is not None:
-        case_ids = case_ids[:limit]
-    wanted = set(case_ids)
-    by_id = {case["case_id"]: case for case in read_jsonl(CLEAN_JSONL) if case["case_id"] in wanted}
-    return [by_id[case_id] for case_id in case_ids]
-
-
 def run(case: dict) -> AgentOutput:
     """One case. The two models alternate here, so use run_batch for more than one case."""
     return run_batch([case])[0]
@@ -85,15 +59,19 @@ def run_batch(cases: list[dict], no_rag: bool = False) -> list[AgentOutput]:
     stage_s: dict[str, float] = {}
 
     start = time.perf_counter()  # phi3: an intent for every case
-    predictions = [classify.predict(case, block, intents) for case in cases]
+    predictions = []
+    for number, case in enumerate(cases, start=1):
+        predictions.append(classify.predict(case, block, intents))
+        progress(f"{system} classify", number, len(cases), start)
     stage_s["classify"] = time.perf_counter() - start
 
     start = time.perf_counter()  # phi3 still loaded. L1 and L2 need no model; L4 is asked where neither fired
     firsts = [escalate.layer1(case) for case in cases]
     seconds = [escalate.layer2(case, prediction.intent) for case, prediction in zip(cases, predictions)]
     judgements: list[escalate.Judgement | None] = []
-    for case, prediction, first, second in zip(cases, predictions, firsts, seconds):
+    for number, (case, prediction, first, second) in enumerate(zip(cases, predictions, firsts, seconds), start=1):
         judgements.append(escalate.judge(case, prediction.intent) if first is None and second is None else None)
+        progress(f"{system} L4", number, len(cases), start)
     stage_s["judge"] = time.perf_counter() - start
 
     start = time.perf_counter()  # CPU: MiniLM embeddings and a flat cosine search
@@ -106,8 +84,9 @@ def run_batch(cases: list[dict], no_rag: bool = False) -> list[AgentOutput]:
 
     start = time.perf_counter()  # llama3: a draft for every case, escalated or not, so every reply can be judged
     drafts = []
-    for case, prediction, retrieval in zip(cases, predictions, retrievals):
+    for number, (case, prediction, retrieval) in enumerate(zip(cases, predictions, retrievals), start=1):
         drafts.append(generate.draft(case, prediction.intent, [] if retrieval is None else retrieval.hits))
+        progress(f"{system} draft", number, len(cases), start)
     stage_s["draft"] = time.perf_counter() - start
 
     outputs = []
@@ -130,7 +109,7 @@ def run_batch(cases: list[dict], no_rag: bool = False) -> list[AgentOutput]:
     for stage, seconds_taken in stage_s.items():
         print(f"  {stage:9} {seconds_taken:8.1f} s wall clock, {seconds_taken / len(cases):6.1f} s per case")
     total = sum(stage_s.values())
-    print(f"  {'total':9} {total:8.1f} s wall clock, {total / len(cases):6.1f} s per case")
+    print(f"  {'total':9} {total:8.1f} s wall clock, {total / len(cases):6.1f} s per case", flush=True)
     return outputs
 
 

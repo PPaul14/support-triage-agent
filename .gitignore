@@ -18,3 +18,6 @@ artifacts/embeddings/
 artifacts/llm_calls.jsonl
 artifacts/clusters.md
 artifacts/traces.jsonl
+artifacts/judgements.jsonl
+artifacts/run.log
+artifacts/run.err

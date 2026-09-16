@@ -8,7 +8,7 @@ says why; run them locally. The first two tests read committed files only and ru
 import pytest
 
 from src import baselines, index, retrieve
-from src.pipeline import golden_cases
+from src.runs import golden_cases
 
 MAX_SIMILARITY = 0.98
 needs_data = pytest.mark.skipif(not index.CLEAN_JSONL.exists(),
