@@ -154,5 +154,20 @@ Section 3.1). A stratified figure alone is not a production estimate.
 <!-- audit_stats: start -->
 ## Human audit: agreement with the model labels
 
-Not audited yet: 0 of 40. Agreement: TBD.
+- Audited: 40 of 40, labelled blind by me.
+- **Agreement with the model labels: 25 of 40 (62.5%), Wilson 95% interval 47.0% to 75.8%.**
+
+Per intent, by the model's label; agreement is reported only where at least 5 audited cases carry that label.
+
+| model label | audited | agreed | agreement |
+|---|---|---|---|
+| billing_subscription | 4 | 4 | not reported (support below 5) |
+| account_access | 3 | 1 | not reported (support below 5) |
+| playback_failure | 6 | 3 | 50.0% |
+| library_playlists | 1 | 0 | not reported (support below 5) |
+| content_unavailable | 5 | 3 | 60.0% |
+| feature_request | 7 | 6 | 85.7% |
+| followup_diagnostic | 5 | 3 | 60.0% |
+| chatter_thanks | 3 | 3 | not reported (support below 5) |
+| other_unclear | 6 | 2 | 33.3% |
 <!-- audit_stats: end -->
