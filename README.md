@@ -37,6 +37,12 @@ Three things this table is for:
   would_send_unedited. That is why similarity is a diagnostic here and never a
   headline.
 
+**One caveat on the quality row.** Hand-scoring 30 of these replies blind put
+the judge's agreement with me at 53% on would_send_unedited (Cohen's kappa
+0.07 — chance). Treat that row as one 7B model's opinion, not a validated
+measure ([REPORT.md](report/REPORT.md) 3.4). The auto-handle, harm, cost and
+ROUGE-L columns do not depend on the judge.
+
 Full numbers, intervals and method: [report/REPORT.md](report/REPORT.md)
 Section 3. Every figure is reproduced by `python -m eval.run_eval` from the
 committed run traces, with no model calls.

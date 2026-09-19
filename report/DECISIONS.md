@@ -126,7 +126,8 @@ calls per model, with placeholder draft and judge prompts.
   auto-handled. It is SEVERE when the true intent is billing_subscription or
   the case involves a compromised account, and ORDINARY otherwise. Hiver sells
   a shared-inbox helpdesk, and deflection at a stated safety budget is the
-  number that maps to their product. The budget's value is TBD.
+  number that maps to their product. The budget was then fixed at zero SEVERE
+  and at most 5% ORDINARY (Evaluation method, below), before any system ran.
   - Rejected: a single escalation F1. Escalation is a threshold decision with
     asymmetric costs, and F1 weighs a harmful auto-reply the same as an
     unnecessary escalation.
@@ -299,6 +300,35 @@ calls per model, with placeholder draft and judge prompts.
     part-cycle must not be extended quietly. Each answer's seconds are now
     stored beside it. Annotation tooling that cannot tell
     labelling from keypresses will hand you a number that reads like a finding.
+
+## Judge validation (run 2026-09-19)
+
+- **30 replies hand-scored, not the pre-registered 60.** The sample was halved
+  to fit the time left; the cost is that every kappa in Section 3.4 rests on
+  n = 30, and B0 was not drawn at all (12 no-RAG, 11 B1, 7 full), so B0's
+  quality numbers have no human check.
+  - Rejected: skipping the validation entirely, which is what the pre-registered
+    60 would have meant in practice. A weak measurement of the judge is worth
+    more than none, provided its weakness is stated.
+- **The result was chance agreement on the headline check** — 53%, kappa 0.07
+  on `would_send_unedited` — and it is reported as a finding rather than
+  buried. Section 3.3 is caveated in place, not withdrawn: its marginal rates
+  may still be roughly right (16 of my yeses against the judge's 14), while no
+  per-reply verdict is trustworthy.
+  - `tone_appropriate` collapsed to kappa 0.00 with 77% raw agreement, because
+    the judge answered yes to all 30. Reporting both numbers was fixed in
+    advance (Evaluation method, above) for exactly this case.
+- **The blinding is partial, by construction.** The scorer sees the evidence
+  the judge saw, and whether the agent was given past cases identifies the full
+  system.
+  - Rejected: hiding the precedents. `contains_unsupported_specific` is defined
+    against that evidence, so hiding it would make the check unscoreable.
+- **The hand-scoring CLI reuses the audit's guards, adapted to binary
+  answers** (`eval/hand_score.py`). A keypad pattern — 12 answers all one key,
+  or strictly alternating — is refused only when the last 3 replies were each
+  scored in under 2 seconds. Either signal alone can be honest: five "no"
+  answers in a row happen, and so does one quick obvious reply. Every reply's
+  seconds are stored beside its answers.
 
 ## Pipeline (decided 2026-09-15, before any system is scored)
 

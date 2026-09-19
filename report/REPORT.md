@@ -377,6 +377,11 @@ intent and the verdict reused.
 | would_send_unedited [95% CI] (headline) | 0.127 [0.073, 0.180] | 0.074 [0.034, 0.120] | 0.633 [0.560, 0.713] | **0.693 [0.620, 0.767]** |
 | usable judgements | 150 of 150 | 149 of 150 | 150 of 150 | 150 of 150 |
 
+**Read this table against Section 3.4 first.** Hand-scoring 30 of these
+replies blind put the judge's agreement with me at 53% on would_send_unedited,
+kappa 0.07. The comparisons below are between systems as one 7B judge sees
+them, not against a validated measure of reply quality.
+
 - **Both LLM systems beat both baselines, decisively.** full − B1 on
   would_send_unedited is +0.620 [0.539, 0.699] and full − B0 is +0.567
   [0.473, 0.660]; the no-RAG ablation's margins are the same size. These stand.
@@ -392,27 +397,77 @@ intent and the verdict reused.
 
 ### 3.4 Judge validation
 
-**Not run.** Three of the four planned comparisons need 60 replies hand-scored
-by me, blind to the system, and that has not been done; the fourth, qwen
-re-judging at temperature 0 through `complete(bypass_cache=True)`, is
-implemented in the client but was not executed. Running mistral on a different
-40 pairs than the pre-registered sample would not answer the question it was
-pre-registered to answer, so it was left undone rather than substituted.
+**Run on 30 replies, and it undermines Section 3.3.** I scored 30 (case,
+system) pairs by hand, blind, seeing the reply and the same evidence the judge
+saw and never which system wrote it (`python -m eval.hand_score`, answers in
+`data/golden/judge_human_scores.csv`, agreement by `python -m eval.agreement`).
+
+| check | n | raw agreement | Cohen's kappa | my yes | judge yes | direction of disagreement |
+|---|---|---|---|---|---|---|
+| contains_unsupported_specific | 30 | 21/30 (70%) | 0.13 (slight) | 8 | 5 | judge says no more (6 vs 3) |
+| advances_resolution | 30 | 15/30 (50%) | 0.15 (slight) | 20 | 7 | judge says no more (14 vs 1) |
+| addresses_stated_problem | 30 | 23/30 (77%) | 0.49 (moderate) | 24 | 17 | judge says no more (7 vs 0) |
+| tone_appropriate | 30 | 23/30 (77%) | 0.00 (none or worse than chance) | 23 | 30 | judge says yes more (7 vs 0) |
+| would_send_unedited | 30 | 16/30 (53%) | 0.07 (slight) | 16 | 14 | judge says no more (8 vs 6) |
+
+**This is a finding, not a failure of the exercise.** A judge that agrees with
+a human at chance is a measurement instrument that does not measure, and it is
+better to know that than to publish 3.3 as though it were settled.
+
+- **The headline quality metric is not validated.** `would_send_unedited`
+  agrees on 16 of 30 replies, kappa 0.07. Coin-flip agreement. The 0.693 in
+  3.3 cannot be read as "69% of the full system's replies are sendable"; it is
+  the rate at which one 7B model answered yes to a question it answers almost
+  independently of me.
+- **`tone_appropriate` collapsed exactly as pre-registered.** qwen answered yes
+  on all 30; I answered yes on 23. Raw agreement is a healthy-looking 77% and
+  kappa is 0.00, because a rater that always says yes agrees with anyone by
+  chance. This is why `report/DECISIONS.md` fixed both numbers in advance
+  rather than letting one of them be chosen afterwards.
+- **The judge is systematically harsher on `advances_resolution`**: 14 replies
+  where I said yes and it said no, against 1 the other way. So 3.3's 0.213 and
+  0.393 understate how often these replies give the customer something to act
+  on — the direction matters more than the level here.
+- **It misses unsupported specifics.** I flagged 8 replies, it flagged 5, and
+  6 of my flags were replies it passed. The check meant to catch invented
+  product claims (failure mode 4.1) is the second-weakest on this sample.
+- **`addresses_stated_problem` is the one usable check**, kappa 0.49, moderate.
+
+**The rates are closer than the verdicts.** On this sample I said yes to
+`would_send_unedited` 16 times and the judge 14 — almost the same marginal
+rate, reached by disagreeing on individual replies. A per-system rate in 3.3
+may therefore be roughly right while nearly every individual verdict behind it
+is unreliable. Nothing here licenses a claim about any single reply, and the
+system comparisons in 3.3 inherit the noise: the one that matters,
+full − no-RAG at +0.060 [-0.033, +0.147], was already null before this.
+
+**What this sample does not cover.**
 
 | comparison | checks | kappa | raw agreement |
 |---|---|---|---|
-| qwen vs my hand scores (60) | each of the 5 | not run | not run |
+| qwen vs my hand scores (30 of a planned 60) | each of the 5 | as above | as above |
 | mistral vs qwen (40) | each of the 5 | not run | not run |
 | mistral vs my hand scores (40) | each of the 5 | not run | not run |
 | qwen vs itself, temperature 0 (40) | all 5 | not applicable | not run |
 
-**What is known about the judge, measured on this run:** 1 of 459 judgements
-was unusable after its repair attempt (0.2%), and **130 of the 910 failing
-answers (14%) arrived without the quote the rubric requires**. The rubric
-demands evidence for every failing answer precisely so a human can check it;
-one failing answer in seven cannot be checked. Every number in 3.3 rests on a
-single 7B judge whose agreement with a human is unknown, and that is the
-weakest link in this report (Section 5).
+- **30 replies, not the pre-registered 60**, so every kappa here is itself
+  imprecise; at n = 30 the interval around 0.07 is wide enough to include
+  numbers that would read differently.
+- **B0 was not sampled.** The draw took 12 no-RAG, 11 B1 and 7 full, and none
+  of B0's 9 judged replies. B0's quality numbers have no human check at all.
+- **The blinding is partial by construction.** The evidence block shows whether
+  the agent was given past cases, so a reply with five precedents under it is
+  the full system. Hiding them would have made
+  `contains_unsupported_specific` unscoreable, since it is defined against that
+  evidence. I did not record which system I believed I was scoring, so there is
+  no measurement of how far that leaked.
+- **The cross-judge and self-consistency passes remain unrun**, and both are
+  cheap: mistral over the same 30 pairs, and qwen re-judging through
+  `complete(bypass_cache=True)`.
+
+**Scoring discipline, for the record**: 30 replies, median 26.5 s each (18.0 s
+to 79.7 s), none under 2 seconds, and no keypad pattern in the answer stream —
+checked by the same guard that caught the invalid first audit (Section 5).
 
 ### 3.5 Cost and throughput
 
@@ -659,6 +714,16 @@ It did cost 2.7 auto-handled cases per 100 and 69% more seconds per ticket.
 The honest reading is that the ablation, not the full system, is the better
 configuration on these 150 cases.
 
+**The reply-quality numbers rest on an instrument that does not agree with
+me.** Hand-scoring 30 replies blind put qwen's agreement at 53% on
+would_send_unedited, kappa 0.07 — chance — with only
+`addresses_stated_problem` reaching moderate agreement (kappa 0.49), and
+`tone_appropriate` collapsing to kappa 0.00 because the judge answered yes to
+all 30 (Section 3.4). Section 3.3 is a report about one model's answers. Its
+marginal rates may be roughly right, since I said yes 16 times to the judge's
+14; no claim about an individual reply survives, and the RAG comparison that
+the project was built to make was measured with this instrument.
+
 **A zero is a bound, not a zero.** Zero observed SEVERE harmful auto-replies
 in N budget-relevant cases does not mean the true rate is zero: by the rule of
 three, the 95% upper bound on that rate is about 3/N. N is the number of
@@ -721,13 +786,17 @@ where this project's weakest claims are.
    minutes of work, and it would move every intent number from "indicative" to
    "measured".
 
-2. **Run the two judge-validation passes the harness is already built for**
-   (Section 3.4): mistral 7B over the 40 (case, system) pairs drawn from the 60
-   I hand-score, and qwen re-judging 40 replies through
-   `complete(bypass_cache=True)` for self-consistency. Every reply-quality
-   number rests on a single 7B judge whose agreement with a human is currently
-   unknown. Kappa against my hand scores is what decides whether Section 3.3 is
-   evidence or decoration.
+2. **Fix the judge, then re-measure.** Hand-scoring 30 replies put qwen's
+   agreement with me at chance on the headline check — 53%, kappa 0.07
+   (Section 3.4) — so Section 3.3 currently measures one model's habits. Three
+   things in order: score the remaining 30 replies, so the kappas stop resting
+   on n = 30; rewrite the two weakest checks, because `tone_appropriate` drew
+   yes on all 30 and `would_send_unedited` asks the judge to predict my editing
+   standards without telling it what they are; then run the cross-judge
+   (mistral over the same pairs) and the self-consistency pass
+   (`complete(bypass_cache=True)`), both of which the harness already supports.
+   A judge that disagrees with a human at chance cannot rank systems, and every
+   quality comparison in this report is downstream of it.
 
 3. **Replace the regex hallucination guard with an entailment check against
    the retrieved evidence.** Mode 4.1 is the worst failure in this report: the
