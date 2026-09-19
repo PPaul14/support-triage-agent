@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from eval import escalation, metrics
+from eval import escalation, metrics, reference
 
 
 def test_f1_and_macro_f1_by_hand() -> None:
@@ -90,3 +90,12 @@ def test_sweep_covers_the_grid_and_refuses_decisions_it_cannot_reproduce() -> No
     with_retrieval[1]["output"]["escalate"] = True  # a recorded decision the ladder would not have made
     with pytest.raises(RuntimeError):
         escalation.sweep(with_retrieval, labels)
+
+
+def test_rouge_l_and_reference_tidying() -> None:
+    assert reference.rouge_l("we can help with that", "we can help with that") == pytest.approx(1.0)
+    assert reference.rouge_l("we can help with that", "entirely different wording here") == 0.0
+    assert reference.rouge_l("", "anything") == 0.0
+    # 3 of 4 reference words in order, 3 of 3 candidate words: precision 1.0, recall 0.75
+    assert reference.rouge_l("log out and back in", "log out and in") == pytest.approx(2 * 1.0 * 0.8 / 1.8)
+    assert reference.tidy_reference("@USER @USER Try logging out. /KL") == "Try logging out."

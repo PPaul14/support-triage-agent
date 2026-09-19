@@ -9,9 +9,10 @@ import json
 
 import numpy as np
 
-from eval import cost, data, escalation, intent, metrics, quality
+from eval import cost, data, escalation, intent, metrics, quality, reference
 from eval.judge import JUDGE_MODEL
 from src import classify
+from src.runs import golden_cases
 
 RESULTS_DIR = data.TRACES_JSONL.parent / "eval"
 PAIRS = [("full", "no_rag"), ("full", "b1"), ("full", "b0"), ("no_rag", "b1"), ("no_rag", "b0"), ("b1", "b0")]
@@ -110,15 +111,18 @@ def main() -> None:
     quality_lines, quality_pairs, quality_results = quality.section(runs, case_ids, labels, judged)
     cost_lines, cost_results = cost.section(runs, case_ids, judged_by_system, data.read_traces(),
                                             data.read_judgements())
+    cases = {case["case_id"]: case for case in golden_cases()}
+    reference_lines, reference_results = reference.section(runs, case_ids, cases)
     lines = ["# Evaluation results", "",
              "Written by `python -m eval.run_eval` from the traces and judgements, with no model call. Runs: "
              + ", ".join(f"{system} {run_id}" for system, run_id in run_ids.items())
              + f". {len(case_ids)} golden cases are covered by all four.", ""]
     lines += intent_lines + [""] + escalation_lines + [""] + quality_lines + [""]
     lines += paired_section(intent_pairs + escalation_pairs + quality_pairs) + [""] + cost_lines
+    lines += [""] + reference_lines
     text = "\n".join(lines) + "\n"
     results = {"runs": run_ids, "cases": len(case_ids), "intent": intent_results, "escalation": escalation_results,
-               "quality": quality_results, "cost": cost_results}
+               "quality": quality_results, "cost": cost_results, "reference": reference_results}
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     (RESULTS_DIR / "results.md").write_text(text, encoding="utf-8", newline="\n")
     (RESULTS_DIR / "results.json").write_text(json.dumps(results, indent=2), encoding="utf-8", newline="\n")
