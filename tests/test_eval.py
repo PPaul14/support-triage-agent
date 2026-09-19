@@ -1,9 +1,11 @@
 """Evaluation arithmetic and the offline escalation re-scoring, on made-up inputs. Needs no data or Ollama."""
 
+import math
+
 import numpy as np
 import pytest
 
-from eval import escalation, metrics, reference
+from eval import agreement, escalation, hand_score, metrics, reference
 
 
 def test_f1_and_macro_f1_by_hand() -> None:
@@ -99,3 +101,28 @@ def test_rouge_l_and_reference_tidying() -> None:
     # 3 of 4 reference words in order, 3 of 3 candidate words: precision 1.0, recall 0.75
     assert reference.rouge_l("log out and back in", "log out and in") == pytest.approx(2 * 1.0 * 0.8 / 1.8)
     assert reference.tidy_reference("@USER @USER Try logging out. /KL") == "Try logging out."
+
+
+def test_a_keypad_pattern_is_refused_only_when_it_is_also_too_fast() -> None:
+    same = ["y"] * hand_score.MECHANICAL_RUN
+    alternating = ["y", "n"] * (hand_score.MECHANICAL_RUN // 2)
+    judged = ["y", "n", "n", "y", "n", "y", "y", "n", "n", "n", "y", "n"]
+    assert hand_score.mechanical(same)
+    assert hand_score.mechanical(alternating)
+    assert hand_score.mechanical(judged) is None  # a real pattern of answers is neither
+    assert hand_score.mechanical(same[:-1]) is None  # too few answers to judge
+    hand_score.refuse_if_mechanical(same, [30.0, 25.0, 40.0])  # a pattern, but read at human speed
+    hand_score.refuse_if_mechanical(judged, [0.3, 0.2, 0.1])  # fast, but not a pattern
+    with pytest.raises(SystemExit):
+        hand_score.refuse_if_mechanical(same, [0.3, 0.2, 0.1])
+
+
+def test_cohens_kappa_against_hand_worked_cases() -> None:
+    assert agreement.cohens_kappa(["yes", "no", "yes", "no"], ["yes", "no", "yes", "no"]) == pytest.approx(1.0)
+    assert agreement.cohens_kappa(["yes", "no"], ["no", "yes"]) == pytest.approx(-1.0)
+    # po 0.5 and pe 0.5: agreement exactly at chance
+    assert agreement.cohens_kappa(["yes", "yes", "no", "no"], ["yes", "no", "yes", "no"]) == pytest.approx(0.0)
+    # both raters said yes to everything: chance agreement is already 1, so kappa says nothing
+    assert math.isnan(agreement.cohens_kappa(["yes"] * 4, ["yes"] * 4))
+    assert agreement.strength(float("nan")) == "not defined"
+    assert agreement.strength(0.75) == "substantial"
