@@ -1,4 +1,4 @@
-﻿CLAUDE.md
+CLAUDE.md
 .claude/
 .cursor/
 .cursorrules
@@ -22,3 +22,4 @@ artifacts/judgements.jsonl
 artifacts/run.log
 artifacts/run.err
 artifacts/eval/
+artifacts/audit_labels_invalid.jsonl
