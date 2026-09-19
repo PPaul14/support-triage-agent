@@ -102,7 +102,7 @@ def _repair(key: str, model: str, messages: list[dict], schema: dict, options: d
 
 def _chat(model: str, messages: list[dict], schema: dict | None, options: dict,
           logprobs: bool = False) -> LLMResponse:
-    """POST one chat request to Ollama, retrying only on connection errors."""
+    """POST one chat request to Ollama, retrying on connection errors and read timeouts."""
     payload = {"model": model, "messages": messages, "options": options, "stream": False,
                "logprobs": logprobs}
     if schema is not None:
@@ -114,10 +114,13 @@ def _chat(model: str, messages: list[dict], schema: dict | None, options: dict,
         start = time.perf_counter()
         try:
             http_response = requests.post(OLLAMA_URL, json=payload, timeout=TIMEOUT_S)
-        except requests.ConnectionError as error:
+        except (requests.ConnectionError, requests.Timeout) as error:
             last_error = error
             continue
         latency_s = time.perf_counter() - start
+        if http_response.status_code >= 500:  # the model runner can crash mid-generation; that is retryable
+            last_error = RuntimeError(f"Ollama returned HTTP {http_response.status_code}: {http_response.text}")
+            continue
         if http_response.status_code != 200:
             raise RuntimeError(f"Ollama returned HTTP {http_response.status_code}: {http_response.text}")
         body = http_response.json()

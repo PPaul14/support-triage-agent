@@ -204,6 +204,27 @@ calls per model, with placeholder draft and judge prompts.
   - Rejected: a second Ollama client for re-runs, which would break the rule
     that every LLM call goes through `src/llm.py`.
 
+- **`src/llm.py` retries read timeouts and 5xx replies, not only connection
+  errors** (2026-09-17 and 2026-09-18). Two long runs died on transient Ollama
+  failures that the retry loop could not see.
+  - A call that hung past the 600 s read timeout killed the run at judgement 52
+    of 459, after all four pipeline stages had finished: `requests.ReadTimeout`
+    is not a `ConnectionError`, so the exception reached the top of the run.
+    The handler now catches `requests.Timeout` as well.
+  - The restarted run then died at judgement 308 of 459 on `HTTP 500: an error
+    was encountered while running the model: unexpected EOF`, Ollama's model
+    runner crashing mid-generation. `_chat` raised on every non-200, so a
+    server-side crash was fatal where a dropped connection was not. Any 5xx is
+    now retried with the same backoff; 4xx still raises, because a bad request
+    will not fix itself.
+  - Both fixes make a hung or crashed generation cost one backoff and a retry
+    instead of the batch.
+  - The disk cache made the restart cheap: the three pipeline stages replayed
+    from disk in 0.7 minutes together, and only the unjudged replies were
+    recomputed. That property is worth more than any single retry rule.
+  - Rejected: raising the 600 s read timeout. That makes a genuinely stuck call
+    take longer to fail without making it recoverable.
+
 ## Golden set (`src/golden.py`)
 
 - **The stratification estimate is read from cached phi3 predictions only,
